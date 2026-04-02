@@ -47,8 +47,8 @@ export default async function handler(req) {
       },
     };
 
-    // Gemini 2.5 Flash — 무료 티어 지원
-    const model = 'gemini-2.5';
+    // Gemini 2.0 Flash — 무료 티어, v1beta 안정 지원
+    const model = 'gemini-2.0-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
     const res = await fetch(url, {
