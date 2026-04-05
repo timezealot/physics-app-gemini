@@ -22,24 +22,35 @@ export default async function handler(req) {
       });
     }
 
-    // Anthropic messages 형식 → Gemini contents 형식 변환
-    const contents = messages.map(msg => ({
-      role: msg.role === 'assistant' ? 'model' : 'user',
-      parts: (Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }])
-        .map(part => {
-          if (part.type === 'text') return { text: part.text };
-          if (part.type === 'image') return {
+    // Anthropic parts → Gemini parts 변환
+    // 핵심: 모든 content 항목을 하나의 parts 배열로 합치기
+    const allParts = [];
+    for (const msg of messages) {
+      const content = Array.isArray(msg.content)
+        ? msg.content
+        : [{ type: 'text', text: msg.content }];
+
+      for (const part of content) {
+        if (part.type === 'text') {
+          // 연속된 텍스트는 합치기
+          if (allParts.length > 0 && allParts[allParts.length - 1].text !== undefined) {
+            allParts[allParts.length - 1].text += '\n' + part.text;
+          } else {
+            allParts.push({ text: part.text });
+          }
+        } else if (part.type === 'image') {
+          allParts.push({
             inlineData: {
               mimeType: part.source.media_type,
               data: part.source.data,
             }
-          };
-          return { text: '' };
-        })
-    }));
+          });
+        }
+      }
+    }
 
     const geminiBody = {
-      contents,
+      contents: [{ role: 'user', parts: allParts }],
       systemInstruction: system ? { parts: [{ text: system }] } : undefined,
       generationConfig: {
         maxOutputTokens: 16000,
@@ -47,7 +58,7 @@ export default async function handler(req) {
       },
     };
 
-    // Gemini 2.0 Flash — 무료 티어, v1beta 안정 지원
+    // gemini-2.5-flash-lite (stable) — 무료 티어 하루 1,000회
     const model = 'gemini-2.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
@@ -67,7 +78,7 @@ export default async function handler(req) {
       });
     }
 
-    // Gemini SSE → Anthropic SSE 형식으로 변환해서 전달
+    // Gemini SSE → Anthropic SSE 형식 변환
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
     const encoder = new TextEncoder();
@@ -94,7 +105,6 @@ export default async function handler(req) {
                 const j = JSON.parse(d);
                 const text = j.candidates?.[0]?.content?.parts?.[0]?.text;
                 if (text) {
-                  // Anthropic delta 형식으로 변환
                   const out = JSON.stringify({
                     type: 'content_block_delta',
                     delta: { type: 'text_delta', text }
