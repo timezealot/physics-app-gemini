@@ -725,11 +725,11 @@ async function downloadPDF(){
     await document.fonts.ready;
     await new Promise(r=>setTimeout(r,200));
 
-    // 카드 한 장 캡처
+    // 카드 한 장 캡처 - 셀 너비에 맞게 렌더링해서 자연스럽게 꽉 채움
     const captureCard=async(cardEl)=>{
-      const RENDER_W=Math.round(cellW*3.7795*SCALE); // 셀 너비 기준으로 고해상도
+      const CELL_PX=Math.round(cellW*3.7795); // 셀 너비를 px로
       const wrap=document.createElement('div');
-      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${Math.round(cellW*3.7795)}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
+      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${CELL_PX}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
       const cl=cardEl.cloneNode(true);
       cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;box-sizing:border-box;';
       cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
@@ -739,21 +739,19 @@ async function downloadPDF(){
       await new Promise(r=>setTimeout(r,50));
       const canvas=await html2canvas(wrap,{
         scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,
-        width:Math.round(cellW*3.7795),windowWidth:Math.round(cellW*3.7795),
+        width:CELL_PX,windowWidth:CELL_PX,
       });
       document.body.removeChild(wrap);
       return canvas;
     };
 
-    // 카드를 x,y 위치에 cellW×cellH 안에 맞춰 삽입
+    // 카드를 x,y 위치에 배치 - 너비 cellW 고정, 높이 비율 유지 (cellH 초과 시 축소)
     const placeCard=async(cardEl,x,y)=>{
       const canvas=await captureCard(cardEl);
-      const srcW=canvas.width, srcH=canvas.height;
-      const mmW=srcW/SCALE*25.4/96;
-      const mmH=srcH/SCALE*25.4/96;
-      // 너비를 셀에 꽉 채우고, 높이는 비율 유지 (cellH 초과 시 cellH로 제한)
-      const fitW=cellW;
-      const fitH=Math.min(mmH*(cellW/mmW), cellH);
+      // canvas는 이미 cellW 너비로 렌더링됨 → 그대로 cellW로 삽입
+      const naturalH=canvas.height/canvas.width*cellW; // 비율 유지 높이
+      const fitH=Math.min(naturalH,cellH);
+      const fitW=fitH===naturalH ? cellW : cellW*(fitH/naturalH);
       pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',x,y,fitW,fitH);
     };
 
