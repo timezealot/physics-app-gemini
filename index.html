@@ -714,70 +714,111 @@ async function downloadPDF(){
     const d=new Date();
     const fname=`물리1_분석결과_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`;
     const today=d.toLocaleDateString('ko-KR');
-
-    // 결과 전체를 숨겨진 컨테이너에 복제
-    const SCALE=3; // 고화질
-    const A4W_PX=794*SCALE;
-    const wrap=document.createElement('div');
-    wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${A4W_PX/SCALE}px;background:#f5f4f0;padding:16px;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
-
-    // 헤더
-    wrap.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #2563eb"><div style="width:24px;height:24px;background:#2563eb;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:12px">S</div><div style="font-size:13px;font-weight:700;color:#1a1917">물리1 풀이 분석기<span style="font-size:10px;color:#a8a49e;font-weight:400;margin-left:8px">${today}</span></div></div>`;
-
-    // 카드 복제
-    Array.from(rc.children).forEach(card=>{
-      const cl=card.cloneNode(true);
-      cl.style.marginBottom='12px';
-      cl.style.borderRadius='12px';
-      cl.style.boxShadow='0 1px 3px rgba(0,0,0,.08)';
-      cl.querySelectorAll('*').forEach(el=>{
-        el.style.maxHeight='none';
-        el.style.overflow='visible';
-      });
-      wrap.appendChild(cl);
-    });
-    document.body.appendChild(wrap);
+    const SCALE=2;
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const PW=210,PH=297,MG=8,GAP=4;
+    // 2×2 그리드: 셀 너비/높이
+    const cellW=(PW-MG*2-GAP)/2;
+    const cellH=(PH-MG*2-GAP*2)/2; // 상단 헤더 여백 포함
 
     // 폰트 로드 대기
     await document.fonts.ready;
-    await new Promise(r=>setTimeout(r,300));
+    await new Promise(r=>setTimeout(r,200));
 
-    // 고화질 캡처
-    const canvas=await html2canvas(wrap,{
-      scale:SCALE,
-      useCORS:true,
-      backgroundColor:'#f5f4f0',
-      logging:false,
-      windowWidth:A4W_PX/SCALE,
-    });
-    document.body.removeChild(wrap);
+    // 카드 한 장 캡처
+    const captureCard=async(cardEl)=>{
+      const RENDER_W=Math.round(cellW*3.7795); // mm → px
+      const wrap=document.createElement('div');
+      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
+      const cl=cardEl.cloneNode(true);
+      cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;box-sizing:border-box;';
+      cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
+      wrap.appendChild(cl);
+      document.body.appendChild(wrap);
+      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+      await new Promise(r=>setTimeout(r,50));
+      const canvas=await html2canvas(wrap,{
+        scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,
+        width:RENDER_W,windowWidth:RENDER_W,
+      });
+      document.body.removeChild(wrap);
+      return canvas;
+    };
 
-    // A4 PDF로 페이지 분할
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=210,PH=297,MG=8;
-    const printW=PW-MG*2;
-    const printH=PH-MG*2;
-    const pxPerMm=canvas.width/printW;
-    const pageHeightPx=printH*pxPerMm;
-    let srcY=0;
-    let isFirst=true;
+    // 카드를 x,y 위치에 cellW×cellH 안에 맞춰 삽입
+    const placeCard=async(cardEl,x,y)=>{
+      const canvas=await captureCard(cardEl);
+      const srcW=canvas.width, srcH=canvas.height;
+      const mmW=srcW/SCALE*25.4/96; // px→mm (96dpi 기준)
+      const mmH=srcH/SCALE*25.4/96;
+      // cellW×cellH 안에 맞추기 (비율 유지)
+      const ratioW=cellW/mmW, ratioH=cellH/mmH;
+      const ratio=Math.min(ratioW,ratioH,1);
+      const fitW=mmW*ratio, fitH=mmH*ratio;
+      pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',x,y,fitW,fitH);
+    };
 
-    while(srcY<canvas.height){
-      if(!isFirst)pdf.addPage();
-      isFirst=false;
-      const sliceH=Math.min(pageHeightPx,canvas.height-srcY);
-      const sc=document.createElement('canvas');
-      sc.width=canvas.width;
-      sc.height=Math.ceil(sliceH);
-      sc.getContext('2d').drawImage(canvas,0,srcY,canvas.width,sliceH,0,0,sc.width,sc.height);
-      const imgH=sliceH/pxPerMm;
-      pdf.addImage(sc.toDataURL('image/jpeg',0.95),'JPEG',MG,MG,printW,imgH);
+    // 2×2 그리드 위치
+    const positions=[
+      {x:MG,           y:MG},
+      {x:MG+cellW+GAP, y:MG},
+      {x:MG,           y:MG+cellH+GAP},
+      {x:MG+cellW+GAP, y:MG+cellH+GAP},
+    ];
 
-      // 페이지 번호
-      const totalPagesEst=Math.ceil(canvas.height/pageHeightPx);
-      pdf.setFontSize(8);pdf.setTextColor(168,164,158);
-      pdf.text(`${Math.round(srcY/pageHeightPx)+1}`,PW/2,PH-4,{align:'center'});
-      srcY+=sliceH;
+    const allCards=Array.from(rc.children);
+    const probCards=allCards.filter(el=>el.classList.contains('prob-card'));
+    const totalCards=allCards.filter(el=>el.classList.contains('total-card'));
+
+    // 문제 카드 4개씩 페이지 배치
+    let isFirstPage=true;
+    for(let i=0;i<probCards.length;i++){
+      const posIdx=i%4;
+      if(posIdx===0){
+        if(!isFirstPage) pdf.addPage();
+        isFirstPage=false;
+        // 페이지 구분선
+        pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.3);
+        // 세로 중앙선
+        pdf.line(MG+cellW+GAP/2, MG, MG+cellW+GAP/2, PH-MG);
+        // 가로 중앙선
+        pdf.line(MG, MG+cellH+GAP/2, PW-MG, MG+cellH+GAP/2);
+        // 페이지 번호
+        pdf.setFontSize(7);pdf.setTextColor(168,164,158);
+        pdf.setFont('helvetica','normal');
+        pdf.text(`${Math.floor(i/4)+1}`,PW/2,PH-2,{align:'center'});
+        pdf.text(today,PW-MG,PH-2,{align:'right'});
+      }
+      const pos=positions[posIdx];
+      await placeCard(probCards[i],pos.x,pos.y);
+    }
+
+    // 총평 (별도 페이지, 전체 너비)
+    if(totalCards.length>0){
+      pdf.addPage();
+      let curY=MG;
+      for(const card of totalCards){
+        const RENDER_W=Math.round((PW-MG*2)*3.7795);
+        const wrap=document.createElement('div');
+        wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
+        const cl=card.cloneNode(true);
+        cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;';
+        cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
+        wrap.appendChild(cl);
+        document.body.appendChild(wrap);
+        await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+        await new Promise(r=>setTimeout(r,50));
+        const canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:RENDER_W,windowWidth:RENDER_W});
+        document.body.removeChild(wrap);
+        const fitW=PW-MG*2;
+        const fitH=(canvas.height/SCALE*25.4/96)*(fitW/(canvas.width/SCALE*25.4/96));
+        if(curY+fitH>PH-MG){pdf.addPage();curY=MG;}
+        pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',MG,curY,fitW,fitH);
+        curY+=fitH+GAP;
+      }
+      pdf.setFontSize(7);pdf.setTextColor(168,164,158);
+      pdf.text(`${Math.floor((probCards.length-1)/4)+2}`,PW/2,PH-2,{align:'center'});
+      pdf.text(today,PW-MG,PH-2,{align:'right'});
     }
 
     pdf.save(fname);
