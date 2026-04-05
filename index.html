@@ -465,15 +465,14 @@ async function analyze(){
 문제 N 피드백
 =============================
 ▶ 1. 정답
-(해설에서 확인한 정답 원문자)
+①
 ▶ 2. 정오답 판단
-(O 또는 X)
+O
 ▶ 3. 문제 풀이법
-※ 아래 단계는 [해설] 섹션의 내용을 그대로 옮겨 적은 것입니다.
-1단계: (해설에 나온 내용 그대로)
-2단계: (해설에 나온 내용 그대로)
-3단계: (해설에 나온 수식·수치 그대로)
-4단계: (해설의 최종 정답 도출)
+1단계: 
+2단계: 
+3단계: 
+4단계: 
 ▶ 4. 풀이 피드백
 - 틀린 부분: 
 - 올바른 내용: 
@@ -492,6 +491,8 @@ async function analyze(){
 ▶ 전체 점수표
 | 문제 | 정오답 | 개념 이해도 | 풀이 전개력 | 문제 해석력 | 합계 |
 |------|--------|-----------|-----------|-----------|------|
+| 1번 | O | 10/10 | 8/10 | 9/10 | 27/30 |
+(문제마다 위와 같이 한 줄씩 추가. 마지막 줄에 평균 행 추가)
 | 평균 | - | X.X | X.X | X.X | XX.X/30 |
 ▶ 강점
 ▶ 보완할 점
@@ -519,21 +520,52 @@ async function analyze(){
       ? '\n\n[정답 목록 — 선생님 입력값, 절대적으로 신뢰하세요]\n'+bulkCorrEntries.map(([n,v])=>`문제 ${n}번 정답: ${v}`).join('\n')
       : '';
 
-    parts.push({type:'text',text:'[정답 및 해설 사진/내용] ← 이것을 먼저 읽어 각 문제의 정답을 파악하세요'});
+    parts.push({type:'text',text:`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[섹션 1: 정답 및 해설]
+이 섹션의 이미지/텍스트에서 각 문제의 정답과 풀이 과정을 읽으세요.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`});
     if(aT)parts.push({type:'text',text:aT});
-    bulkStore.a.forEach(img=>parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}}));
-    parts.push({type:'text',text:'\n[문제 사진/내용]'});
+    bulkStore.a.forEach((img,ii)=>{
+      parts.push({type:'text',text:`[해설 이미지 ${ii+1}/${bulkStore.a.length}]`});
+      parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+    });
+
+    parts.push({type:'text',text:`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[섹션 2: 문제]
+이 섹션의 이미지/텍스트에서 각 문제의 내용을 읽으세요.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`});
     if(qT)parts.push({type:'text',text:qT});
-    bulkStore.q.forEach(img=>parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}}));
-    parts.push({type:'text',text:'\n[학생 풀이 사진/내용]'});
+    bulkStore.q.forEach((img,ii)=>{
+      parts.push({type:'text',text:`[문제 이미지 ${ii+1}/${bulkStore.q.length}]`});
+      parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+    });
+
+    parts.push({type:'text',text:`
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+[섹션 3: 학생 풀이]
+이 섹션의 이미지/텍스트가 학생이 실제로 작성한 풀이입니다.
+학생의 손글씨 풀이 과정, 계산, 최종 답을 모두 읽어서 피드백과 역량 점수에 반영하세요.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`});
     if(sT)parts.push({type:'text',text:sT});
-    bulkStore.s.forEach(img=>parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}}));
-    feedbackFormat=`사진과 내용을 분석하세요.
+    bulkStore.s.forEach((img,ii)=>{
+      parts.push({type:'text',text:`[학생 풀이 이미지 ${ii+1}/${bulkStore.s.length}]`});
+      parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+    });
+    feedbackFormat=`아래 사진과 내용을 분석하세요.
 ${range?`분석 대상: ${range}`:'사진에서 모든 문제를 찾아 분석하세요.'}
 ${bulkCorrText}
 ${bulkAnsText}
-${bulkCorrText?'위 [정답 목록]이 있는 문제는 반드시 그 값을 정답으로 사용하세요. 해설에서 다시 읽지 마세요.':'정답은 반드시 [정답 및 해설]에서 확인하세요.'}
-각 문제마다 아래 형식을 반복하세요:
+
+중요 규칙:
+1. ▶ 1. 정답: 반드시 [정답 및 해설]에서 읽은 정답을 원문자(①②③④⑤)로만 쓰세요.${bulkCorrText?' 단, 위 [정답 목록]이 있으면 그 값을 사용하세요.':''}
+2. ▶ 2. 정오답: 학생 선택 정답과 해설 정답을 비교해 O 또는 X만 쓰세요.
+3. ▶ 3. 풀이법: 반드시 [정답 및 해설] 내용만 사용하세요. 추론이나 창작 금지.
+4. ▶ 4. 피드백: 학생 풀이와 해설을 비교해서 구체적으로 작성하세요.
+5. ▶ 5. 역량 점수: 각 항목을 반드시 채워 쓰세요. "평가 불가" 금지.
+
+각 문제마다 아래 형식을 정확히 반복하세요:
 ${FMT_PROBLEM.replace(/문제 N/g,'문제 N(번호)')}
 모든 문제 완료 후:${FMT_TOTAL}`;
   parts.push({type:'text',text:feedbackFormat});
