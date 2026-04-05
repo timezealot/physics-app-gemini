@@ -611,10 +611,10 @@ function renderResult(text,container){
     }
 
     // 풀이 단계
-    if(/^\d단계[:\s]/.test(trimmed)){
-      const nm=trimmed.match(/^(\d)단계[:\s]+(.*)/);
+    if(/^\d+단계[:\s]/.test(trimmed)){
+      const nm=trimmed.match(/^(\d+)단계[:\s]+(.*)/);
       if(nm){
-        html+=`<div style="display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:7px;padding:8px 12px;margin-bottom:6px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0">${nm[1]}</span><span style="font-size:13px;color:var(--text);line-height:1.6">${esc(nm[2])}</span></div>`;
+        html+=`<div style="display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:7px;padding:8px 12px;margin-bottom:6px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);min-width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px">${nm[1]}</span><span style="font-size:13px;color:var(--text);line-height:1.6">${esc(nm[2])}</span></div>`;
         continue;
       }
     }
@@ -929,7 +929,7 @@ async function downloadPDF(){
       }
 
       // 풀이 단계
-      const stepM=t.match(/^(\d)단계[:\s]+(.*)/);
+      const stepM=t.match(/^(\d+)단계[:\s]+(.*)/);
       if(stepM){drawStep(stepM[1],stepM[2]);continue;}
 
       // 역량 점수
