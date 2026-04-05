@@ -410,89 +410,49 @@ async function analyze(){
 
   if(isMock){setTimeout(()=>renderResult(MOCK_RESPONSE,rc),800);return;}
 
-  const SYSTEM=`당신은 대한민국 고등학교 물리1 전문 교사입니다. 학생 풀이를 분석하고 피드백을 작성합니다.
+  const SYSTEM=`물리1 교사. 학생 풀이 분석·피드백 작성.
 
-【이미지 읽기 — 물리1 용어 정확성】
-이미지에서 텍스트를 읽을 때 물리1 맥락에 맞게 정확히 읽으세요.
-
-수식·기호 읽기 규칙 (가장 중요):
-- 질량을 나타낼 때: m, 2m, M, 3M 등 (g 없음) — 단위는 kg
-- 중력/무게를 나타낼 때: mg, 2mg, Mg 등 (g 있음) — 단위는 N
-- 이미지에서 "2m"과 "2mg"는 완전히 다른 물리량입니다. 이미지에 g가 있는지 없는지 반드시 확인하세요.
-- 실(줄)에 연결된 물체의 질량 표기는 보통 m, 2m, M 등 g 없이 씁니다.
-- 힘·장력·중력은 mg, 2mg처럼 g를 붙여 씁니다.
-- L/2, M/3 등은 길이나 질량의 분수값입니다.
-
-자주 혼동되는 한글 오인식:
-- 출퇴 → 출제, 질감 → 질량, 무계 → 무게, 막돼 → 막대
-- 마철 → 마찰, 수직횡력 → 수직항력, 돌림 힘 → 돌림힘
-- 운동에네지 → 운동 에너지, 역학적에네지 → 역학적 에너지
-
-반드시 지켜야 할 규칙:
-
-【풀이법(▶ 3.) 작성 — 가장 중요】
-- [해설] 섹션의 텍스트와 이미지에 나온 풀이 과정을 그대로 옮겨 적으세요.
-- 해설 이미지를 직접 읽고 거기에 쓰인 수식·수치·기호·단위를 그대로 사용하세요.
-- 절대로 자체적으로 풀이를 만들어내거나 추론하지 마세요.
-- 해설에 없는 단계, 수식, 개념을 추가하지 마세요.
-- 당신이 알고 있는 물리1 지식으로 해설을 수정하거나 보완하지 마세요.
-- 해설이 틀려 보여도 해설 내용 그대로 옮기세요. 당신의 판단이 아닌 해설이 기준입니다.
-- 해설의 수식을 일반 텍스트로 표현하세요 (예: F×d = 30×4 + 10×2 = 140).
-
-【정답(▶ 1.) 작성】
-- [해설] 섹션에서 정답을 확인하고 원문자(①②③④⑤)로만 표기하세요. 추측 금지.
-- 당신이 직접 계산해서 정답을 구하지 마세요. 해설에 나온 정답을 그대로 쓰세요.
-
-【정오답(▶ 2.) 판단】
-- "학생이 선택한 정답" 값과 해설 정답을 비교해서 O 또는 X만 쓰세요.
-
-【피드백(▶ 4.)】
-- 학생 풀이와 해설을 비교해서 차이점을 지적하세요.
-- 피드백도 해설을 기준으로 작성하고, 해설에 없는 물리 개념을 피드백에 추가하지 마세요.
-
-【역량 점수(▶ 5.)】
-- 해설 기준으로 학생 풀이를 평가하세요.
-
-【출력 형식 규칙】
-- 형식 기호(▶ =====)와 항목명을 절대 바꾸지 마세요.
-- LaTeX 금지. 수식은 일반 텍스트(×, ÷, =, →)로만 쓰세요.
-- 인사말·여담 금지.
-- 점수: "X점 / 10점 | 이유: 한 문장"
-- 각 문제 블록은 독립적입니다. 해당 블록 내용만 사용하세요.`;
+규칙:
+- 풀이법(▶3): [해설]에 나온 내용만. 추론·창작·보완 금지. 수식은 일반텍스트(×÷=→).
+- 정답(▶1): [해설]에서 확인, 원문자(①②③④⑤)만. 직접계산 금지.
+- 정오답(▶2): 학생정답↔해설정답 비교, O/X만.
+- 피드백(▶4): 해설기준. 미기재 개념추가 금지.
+- 점수(▶5): 해설기준 평가. "평가불가" 금지. 형식: X점/10점|이유:한문장
+- 형식(▶ =====) 변경금지. LaTeX금지. 인사말금지. 각블록 독립.
+- 이미지: m/2m=질량(kg), mg/2mg=중력(N). g유무 확인. 질감→질량, 막돼→막대, 마철→마찰.`;
 
   const FMT_PROBLEM=`
-=============================
-문제 N 피드백
-=============================
+=====
+문제N 피드백
+=====
 ▶ 1. 정답
 ①
 ▶ 2. 정오답 판단
 O
 ▶ 3. 문제 풀이법
-1단계: 
-2단계: 
-3단계: 
-4단계: 
+1단계:
+2단계:
+3단계:
+4단계:
 ▶ 4. 풀이 피드백
-- 틀린 부분: 
-- 올바른 내용: 
-- 틀린 이유: 
-- 개선점: 
+- 틀린 부분:
+- 올바른 내용:
+- 틀린 이유:
+- 개선점:
 ▶ 5. 역량 점수
-- 개념 이해도: X점 / 10점 | 이유: 
-- 풀이 전개력: X점 / 10점 | 이유: 
-- 문제 해석력: X점 / 10점 | 이유: 
+- 개념 이해도: X점 / 10점 | 이유:
+- 풀이 전개력: X점 / 10점 | 이유:
+- 문제 해석력: X점 / 10점 | 이유:
 - 합계: XX점 / 30점`;
 
   const FMT_TOTAL=`
-=============================
+=====
 총평
-=============================
+=====
 ▶ 전체 점수표
 | 문제 | 정오답 | 개념 이해도 | 풀이 전개력 | 문제 해석력 | 합계 |
 |------|--------|-----------|-----------|-----------|------|
 | 1번 | O | 10/10 | 8/10 | 9/10 | 27/30 |
-(문제마다 위와 같이 한 줄씩 추가. 마지막 줄에 평균 행 추가)
 | 평균 | - | X.X | X.X | X.X | XX.X/30 |
 ▶ 강점
 ▶ 보완할 점
@@ -520,54 +480,30 @@ O
       ? '\n\n[정답 목록 — 선생님 입력값, 절대적으로 신뢰하세요]\n'+bulkCorrEntries.map(([n,v])=>`문제 ${n}번 정답: ${v}`).join('\n')
       : '';
 
-    parts.push({type:'text',text:`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[섹션 1: 정답 및 해설]
-이 섹션의 이미지/텍스트에서 각 문제의 정답과 풀이 과정을 읽으세요.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`});
+    parts.push({type:'text',text:'[해설]'});
     if(aT)parts.push({type:'text',text:aT});
     bulkStore.a.forEach((img,ii)=>{
-      parts.push({type:'text',text:`[해설 이미지 ${ii+1}/${bulkStore.a.length}]`});
+      parts.push({type:'text',text:`해설이미지${ii+1}`});
       parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
     });
 
-    parts.push({type:'text',text:`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[섹션 2: 문제]
-이 섹션의 이미지/텍스트에서 각 문제의 내용을 읽으세요.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`});
+    parts.push({type:'text',text:'[문제]'});
     if(qT)parts.push({type:'text',text:qT});
     bulkStore.q.forEach((img,ii)=>{
-      parts.push({type:'text',text:`[문제 이미지 ${ii+1}/${bulkStore.q.length}]`});
+      parts.push({type:'text',text:`문제이미지${ii+1}`});
       parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
     });
 
-    parts.push({type:'text',text:`
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-[섹션 3: 학생 풀이]
-이 섹션의 이미지/텍스트가 학생이 실제로 작성한 풀이입니다.
-학생의 손글씨 풀이 과정, 계산, 최종 답을 모두 읽어서 피드백과 역량 점수에 반영하세요.
-━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`});
+    parts.push({type:'text',text:'[학생풀이] 손글씨 포함 전체를 읽어 피드백·점수에 반영'});
     if(sT)parts.push({type:'text',text:sT});
     bulkStore.s.forEach((img,ii)=>{
-      parts.push({type:'text',text:`[학생 풀이 이미지 ${ii+1}/${bulkStore.s.length}]`});
+      parts.push({type:'text',text:`풀이이미지${ii+1}`});
       parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
     });
-    feedbackFormat=`아래 사진과 내용을 분석하세요.
-${range?`분석 대상: ${range}`:'사진에서 모든 문제를 찾아 분석하세요.'}
-${bulkCorrText}
-${bulkAnsText}
-
-중요 규칙:
-1. ▶ 1. 정답: 반드시 [정답 및 해설]에서 읽은 정답을 원문자(①②③④⑤)로만 쓰세요.${bulkCorrText?' 단, 위 [정답 목록]이 있으면 그 값을 사용하세요.':''}
-2. ▶ 2. 정오답: 학생 선택 정답과 해설 정답을 비교해 O 또는 X만 쓰세요.
-3. ▶ 3. 풀이법: 반드시 [정답 및 해설] 내용만 사용하세요. 추론이나 창작 금지.
-4. ▶ 4. 피드백: 학생 풀이와 해설을 비교해서 구체적으로 작성하세요.
-5. ▶ 5. 역량 점수: 각 항목을 반드시 채워 쓰세요. "평가 불가" 금지.
-
-각 문제마다 아래 형식을 정확히 반복하세요:
-${FMT_PROBLEM.replace(/문제 N/g,'문제 N(번호)')}
-모든 문제 완료 후:${FMT_TOTAL}`;
+    feedbackFormat=`${range?`범위:${range}`:'모든 문제 분석.'}${bulkCorrText}${bulkAnsText}
+=====로 시작. 앞 설명 금지. 평가불가 금지.${bulkCorrText?' 정답목록 우선.':''}
+반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
+완료후:${FMT_TOTAL}`;
   parts.push({type:'text',text:feedbackFormat});
 
   try{
@@ -627,7 +563,13 @@ function renderResult(text,container){
   lastRawText=text;
   const corrected=correctPhysicsText(text);
   container.innerHTML='';
-  const lines=corrected.split('\n');
+
+  // Gemini가 ===== 앞에 불필요한 텍스트를 붙이는 경우 제거
+  // 첫 번째 ===== 이전 텍스트를 버림
+  const firstSep = corrected.indexOf('=====');
+  const cleanText = firstSep > 0 ? corrected.slice(firstSep) : corrected;
+
+  const lines=cleanText.split('\n');
   let html='',inCard=false,inScoreGrid=false,inTable=false;
   const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
@@ -764,120 +706,285 @@ function renderResult(text,container){
 
 async function downloadPDF(){
   const btn=document.getElementById('pdfBtn');
-  const resultContent=document.getElementById('resultContent');
-  if(!lastRawText||!resultContent||!resultContent.children.length){alert('먼저 분석을 완료해주세요.');return;}
+  if(!lastRawText){alert('먼저 분석을 완료해주세요.');return;}
   btn.textContent='⏳ 생성 중...';btn.disabled=true;
   try{
     const{jsPDF}=window.jspdf;
     const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=210,PH=297,MG=6,GAP=3;
-    const cellW=(PW-MG*2-GAP)/2;
-    const cellH=(PH-MG*2-GAP)/2;
+    const PW=210,PH=297,MG=14,LH=5.5;
     const today=new Date().toLocaleDateString('ko-KR');
     const d=new Date();
     const fname=`물리1_분석결과_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`;
+    const TW=PW-MG*2; // 텍스트 영역 너비
 
-    // 카드 분류
-    const allCards=Array.from(resultContent.children);
-    const probCards=allCards.filter(el=>el.classList.contains('prob-card'));
-    const summaryCards=allCards.filter(el=>el.classList.contains('summary-card')||el.classList.contains('total-card'));
+    let curY=MG;
+    let pageNum=1;
 
-    if(!probCards.length && !summaryCards.length){
-      alert('피드백 카드를 찾을 수 없습니다. 다시 분석해주세요.');
-      btn.textContent='⬇ PDF 저장';btn.disabled=false;return;
-    }
+    // 한글 지원 폰트 로드
+    pdf.setFont('helvetica');
 
-    // 카드를 고정 폰트 크기로 렌더링, 넘치면 축소 → PDF 칸에 정확히 삽입
-    const captureCard=async(cardEl,x,y,w,h,addPage)=>{
-      if(addPage)pdf.addPage();
-      const mmToPx=3.7795;
-      const pxW=Math.round(w*mmToPx);
-      const pxH=Math.round(h*mmToPx);
-
-      // 1단계: 자연 높이 측정 (height 제한 없이)
-      const measure=document.createElement('div');
-      measure.style.cssText=`position:fixed;left:-9999px;top:0;width:${pxW}px;background:#f5f4f0;box-sizing:border-box;font-size:13px;visibility:hidden;`;
-      const mc=cardEl.cloneNode(true);
-      mc.style.cssText='width:100%;margin:0;border-radius:0;box-shadow:none;';
-      mc.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
-      measure.appendChild(mc);
-      document.body.appendChild(measure);
-      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-      await new Promise(r=>setTimeout(r,60));
-      const naturalH=measure.scrollHeight||measure.getBoundingClientRect().height||pxH;
-      document.body.removeChild(measure);
-
-      // 2단계: 넘치면 scale 적용해서 pxH 안에 맞춤
-      const scale=naturalH>pxH ? pxH/naturalH : 1;
-
-      const wrap=document.createElement('div');
-      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${pxW}px;height:${pxH}px;overflow:hidden;background:#f5f4f0;box-sizing:border-box;`;
-      const clone=cardEl.cloneNode(true);
-      clone.style.cssText=`width:100%;margin:0;border-radius:0;box-shadow:none;transform-origin:top left;transform:scale(${scale});width:${100/scale}%;`;
-      clone.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
-      wrap.appendChild(clone);
-      document.body.appendChild(wrap);
-      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-      await new Promise(r=>setTimeout(r,80));
-
-      const canvas=await html2canvas(wrap,{
-        scale:2,useCORS:true,backgroundColor:'#f5f4f0',logging:false,
-        width:pxW,height:pxH,windowWidth:pxW,windowHeight:pxH,
-      });
-      document.body.removeChild(wrap);
-      pdf.addImage(canvas.toDataURL('image/jpeg',0.92),'JPEG',x,y,w,h);
+    const newPage=()=>{
+      pdf.addPage();
+      pageNum++;
+      curY=MG;
     };
 
-    // 2문제씩, 위아래 배치
-    const PER=2;
-    const cardW=PW-MG*2;
-    const cardH=(PH-MG*2-GAP)/2;
+    const checkY=(need=6)=>{if(curY+need>PH-MG)newPage();};
 
-    const positions=[
-      {x:MG, y:MG},
-      {x:MG, y:MG+cardH+GAP},
-    ];
+    // 텍스트 줄바꿈 처리
+    const splitText=(text,maxWidth,fontSize)=>{
+      pdf.setFontSize(fontSize);
+      return pdf.splitTextToSize(text,maxWidth);
+    };
 
-    let firstPage=true;
-    for(let i=0;i<probCards.length;i++){
-      const pos=i%PER;
-      const needNewPage=pos===0&&!firstPage;
-      await captureCard(probCards[i],positions[pos].x,positions[pos].y,cardW,cardH,needNewPage);
-      if(pos===0)firstPage=false;
+    // 한 줄 출력
+    const writeLine=(text,opts={})=>{
+      const {fontSize=10,color=[26,25,23],bold=false,indent=0,bg=null,bgH=6}=opts;
+      pdf.setFontSize(fontSize);
+      pdf.setTextColor(...color);
+      pdf.setFont('helvetica', bold?'bold':'normal');
+      const lines=splitText(text,TW-indent,fontSize);
+      lines.forEach((line,i)=>{
+        checkY(LH);
+        if(bg){
+          pdf.setFillColor(...bg);
+          pdf.roundedRect(MG,curY-4,TW,bgH,1,1,'F');
+        }
+        pdf.text(line,MG+indent,curY);
+        curY+=LH;
+      });
+    };
+
+    // 구분선
+    const drawLine=(color=[226,224,216],thick=0.3)=>{
+      checkY(3);
+      pdf.setDrawColor(...color);
+      pdf.setLineWidth(thick);
+      pdf.line(MG,curY,PW-MG,curY);
+      curY+=3;
+    };
+
+    // 카드 헤더
+    const drawCardHeader=(title,isTotal=false)=>{
+      checkY(10);
+      const bg=isTotal?[26,25,23]:[240,239,233];
+      const tc=isTotal?[255,255,255]:[26,25,23];
+      pdf.setFillColor(...bg);
+      pdf.roundedRect(MG,curY-4,TW,8,1.5,1.5,'F');
+      pdf.setFontSize(11);pdf.setFont('helvetica','bold');
+      pdf.setTextColor(...tc);
+      pdf.text(title,MG+4,curY+1);
+      curY+=8;
+    };
+
+    // ▶ 섹션 제목
+    const drawSection=(title)=>{
+      checkY(8);
+      pdf.setFillColor(37,99,235);
+      pdf.rect(MG,curY-3.5,2.5,5,'F');
+      pdf.setFontSize(9);pdf.setFont('helvetica','bold');
+      pdf.setTextColor(107,104,96);
+      pdf.text(title.replace(/^▶\s*/,'').toUpperCase(),MG+5,curY);
+      curY+=6;
+    };
+
+    // 풀이 단계 박스
+    const drawStep=(num,text)=>{
+      checkY(8);
+      pdf.setFillColor(240,239,233);
+      pdf.roundedRect(MG,curY-4,TW,7,1,1,'F');
+      pdf.setFillColor(37,99,235);
+      pdf.setFontSize(8);pdf.setFont('helvetica','bold');
+      pdf.setTextColor(255,255,255);
+      pdf.text(String(num),MG+3,curY);
+      pdf.setFont('helvetica','normal');
+      pdf.setTextColor(26,25,23);
+      const lines=splitText(text,TW-14,9);
+      pdf.text(lines[0]||'',MG+9,curY);
+      curY+=7;
+      if(lines.length>1){
+        lines.slice(1).forEach(l=>{
+          checkY(5);
+          writeLine(l,{fontSize:9,indent:9});
+        });
+      }
+    };
+
+    // 역량 점수 3개 나란히
+    const drawScores=(scores)=>{
+      checkY(22);
+      const bw=(TW-4)/3;
+      scores.forEach((s,i)=>{
+        const x=MG+i*(bw+2);
+        const col=s.score>=10?[22,163,74]:s.score>=8?[37,99,235]:s.score>=6?[217,119,6]:[220,38,38];
+        pdf.setFillColor(255,255,255);
+        pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.3);
+        pdf.roundedRect(x,curY-2,bw,20,1.5,1.5,'FD');
+        pdf.setFontSize(8);pdf.setFont('helvetica','normal');pdf.setTextColor(107,104,96);
+        pdf.text(s.label,x+3,curY+3);
+        pdf.setFontSize(16);pdf.setFont('helvetica','bold');pdf.setTextColor(...col);
+        pdf.text(String(s.score),x+3,curY+10);
+        pdf.setFontSize(7);pdf.setFont('helvetica','normal');pdf.setTextColor(168,164,158);
+        pdf.text('/10',x+3+8,curY+10);
+        if(s.reason&&s.reason!=='만점'){
+          pdf.setFontSize(7);pdf.setTextColor(107,104,96);
+          const rl=splitText(s.reason,bw-6,7);
+          pdf.text(rl[0]||'',x+3,curY+15);
+        }
+      });
+      curY+=23;
+    };
+
+    // 합계
+    const drawTotal=(score)=>{
+      checkY(7);
+      pdf.setFontSize(10);pdf.setFont('helvetica','normal');pdf.setTextColor(107,104,96);
+      pdf.text('합계',PW-MG-30,curY,{align:'right'});
+      pdf.setFontSize(14);pdf.setFont('helvetica','bold');pdf.setTextColor(22,163,74);
+      pdf.text(String(score),PW-MG-20,curY,{align:'right'});
+      pdf.setFontSize(9);pdf.setFont('helvetica','normal');pdf.setTextColor(168,164,158);
+      pdf.text('/30점',PW-MG,curY,{align:'right'});
+      curY+=6;
+    };
+
+    // 표 행
+    const drawTableRow=(cells,isHeader=false,isAvg=false)=>{
+      checkY(7);
+      const cw=[20,18,28,28,28,22]; // 문제/정오답/개념/전개/해석/합계
+      const bg=isHeader||isAvg?[240,239,233]:[255,255,255];
+      pdf.setFillColor(...bg);
+      pdf.rect(MG,curY-4,TW,6.5,'F');
+      pdf.setFontSize(8);pdf.setFont('helvetica',isHeader||isAvg?'bold':'normal');
+      let cx=MG;
+      cells.forEach((cell,ci)=>{
+        const oxColor=cell==='O'?[22,163,74]:cell==='X'?[220,38,38]:null;
+        if(oxColor)pdf.setTextColor(...oxColor);
+        else pdf.setTextColor(26,25,23);
+        pdf.text(String(cell),cx+cw[ci]/2,curY,{align:'center'});
+        cx+=cw[ci];
+      });
+      pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.2);
+      pdf.line(MG,curY+2.5,PW-MG,curY+2.5);
+      curY+=6.5;
+    };
+
+    // ── 본문 파싱 ──
+    const lines=lastRawText.split('\n');
+    let inCard=false,currentTitle='',buf=[];
+    let curSection='',scores=[],totalScore=0;
+    let inTable=false,tableRows=[];
+
+    const flushSection=()=>{
+      if(!curSection)return;
+      drawSection(curSection);
+      curSection='';
+    };
+
+    const flushTable=()=>{
+      if(!inTable||!tableRows.length)return;
+      tableRows.forEach((row,ri)=>{
+        const isH=ri===0;
+        const isA=row[0]==='평균';
+        drawTableRow(row,isH,isA);
+      });
+      inTable=false;tableRows=[];
+      curY+=2;
+    };
+
+    const flushScores=()=>{
+      if(!scores.length)return;
+      drawScores(scores);
+      scores=[];
+    };
+
+    for(let i=0;i<lines.length;i++){
+      const raw=lines[i];
+      const t=raw.trim();
+
+      // ===== 구분선
+      if(/^={4,}/.test(t)){
+        flushScores();flushTable();
+        const next=(lines[i+1]||'').trim();
+        if(next&&!/^={4,}/.test(next)){
+          i++;
+          const isTotal=next.includes('총평');
+          if(inCard){curY+=4;drawLine();}
+          curY+=2;
+          drawCardHeader(next,isTotal);
+          curY+=2;
+          inCard=true;
+          if((lines[i+1]||'').trim().startsWith('='))i++;
+        }
+        continue;
+      }
+
+      if(!inCard)continue;
+
+      // ▶ 섹션
+      if(/^▶/.test(t)){
+        flushScores();flushTable();
+        curSection=t;
+        flushSection();
+        continue;
+      }
+
+      // 풀이 단계
+      const stepM=t.match(/^(\d)단계[:\s]+(.*)/);
+      if(stepM){drawStep(stepM[1],stepM[2]);continue;}
+
+      // 역량 점수
+      const scoreM=t.match(/^-\s+(개념 이해도|풀이 전개력|문제 해석력):\s*(\d+)점\s*\/\s*10점(?:\s*\|\s*이유:\s*(.*))?/);
+      if(scoreM){
+        scores.push({label:scoreM[1],score:parseInt(scoreM[2]),reason:scoreM[3]||''});
+        if(scores.length===3)flushScores();
+        continue;
+      }
+
+      // 합계
+      const totalM=t.match(/^-\s+합계:\s*(\d+)점\s*\/\s*30점/);
+      if(totalM){flushScores();drawTotal(parseInt(totalM[1]));continue;}
+
+      // 파이프 표
+      if(/^\|/.test(t)){
+        if(/^\|[-| :]+\|$/.test(t))continue; // 구분선 스킵
+        const cells=t.split('|').map(c=>c.trim()).filter(c=>c);
+        if(!inTable){inTable=true;tableRows=[];}
+        tableRows.push(cells);
+        continue;
+      }
+      if(inTable){flushTable();}
+
+      // 일반 - 항목
+      if(/^-\s+/.test(t)){
+        flushScores();
+        writeLine(t,{fontSize:9,color:[26,25,23],indent:2});
+        continue;
+      }
+
+      // 정답/정오답 값 (①~⑤, O, X)
+      if(/^[①②③④⑤]$/.test(t)){
+        writeLine(t,{fontSize:13,bold:true,color:[37,99,235]});continue;
+      }
+      if(t==='O'){writeLine(t,{fontSize:13,bold:true,color:[22,163,74]});continue;}
+      if(t==='X'){writeLine(t,{fontSize:13,bold:true,color:[220,38,38]});continue;}
+
+      // 빈 줄
+      if(!t){curY+=2;continue;}
+
+      // 일반 텍스트
+      writeLine(t,{fontSize:9});
     }
 
-    // 총평 페이지
-    if(summaryCards.length>0){
-      const wrap=document.createElement('div');
-      wrap.style.cssText=`position:fixed;left:0;top:0;width:${PW*3.7795}px;z-index:99999;background:#f5f4f0;padding:20px;box-sizing:border-box;`;
-      // 헤더
-      wrap.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #2563eb"><div style="width:24px;height:24px;background:#2563eb;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:12px">S</div><div style="font-size:13px;font-weight:700;color:#1a1917">물리1 풀이 분석기 — 종합 평가 &nbsp;<span style="font-size:10px;color:#a8a49e;font-weight:400">${today}</span></div></div>`;
-      summaryCards.forEach(card=>{
-        const cl=card.cloneNode(true);
-        cl.style.marginBottom='12px';
-        cl.querySelectorAll('*').forEach(el=>{
-          if(getComputedStyle(el).overflow==='hidden')el.style.overflow='visible';
-        });
-        wrap.appendChild(cl);
-      });
-      document.body.appendChild(wrap);
-      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-      await new Promise(r=>setTimeout(r,200));
+    flushScores();flushTable();
 
-      const canvas=await html2canvas(wrap,{scale:2,useCORS:true,backgroundColor:'#f5f4f0',logging:false});
-      document.body.removeChild(wrap);
-
-      const fw=PW-MG*2,pxToMm=fw/canvas.width,pageHpx=(PH-MG*2)/pxToMm;
-      let srcY=0;
-      while(srcY<canvas.height){
-        pdf.addPage();
-        const sliceH=Math.min(pageHpx,canvas.height-srcY);
-        const sc=document.createElement('canvas');
-        sc.width=canvas.width;sc.height=Math.ceil(sliceH);
-        sc.getContext('2d').drawImage(canvas,0,srcY,canvas.width,sliceH,0,0,sc.width,sc.height);
-        pdf.addImage(sc.toDataURL('image/jpeg',0.92),'JPEG',MG,MG,fw,sliceH*pxToMm);
-        srcY+=sliceH;
-      }
+    // 페이지 번호
+    const totalPages=pdf.getNumberOfPages();
+    for(let p=1;p<=totalPages;p++){
+      pdf.setPage(p);
+      pdf.setFontSize(8);pdf.setFont('helvetica','normal');pdf.setTextColor(168,164,158);
+      pdf.text(`${p} / ${totalPages}`,PW/2,PH-6,{align:'center'});
+      pdf.text('물리1 풀이 분석기',MG,PH-6);
+      pdf.text(today,PW-MG,PH-6,{align:'right'});
     }
 
     pdf.save(fname);
