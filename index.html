@@ -706,285 +706,78 @@ function renderResult(text,container){
 
 async function downloadPDF(){
   const btn=document.getElementById('pdfBtn');
-  if(!lastRawText){alert('먼저 분석을 완료해주세요.');return;}
+  const rc=document.getElementById('resultContent');
+  if(!lastRawText||!rc||!rc.children.length){alert('먼저 분석을 완료해주세요.');return;}
   btn.textContent='⏳ 생성 중...';btn.disabled=true;
   try{
     const{jsPDF}=window.jspdf;
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    const PW=210,PH=297,MG=14,LH=5.5;
-    const today=new Date().toLocaleDateString('ko-KR');
     const d=new Date();
     const fname=`물리1_분석결과_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`;
-    const TW=PW-MG*2; // 텍스트 영역 너비
+    const today=d.toLocaleDateString('ko-KR');
 
-    let curY=MG;
-    let pageNum=1;
+    // 결과 전체를 숨겨진 컨테이너에 복제
+    const SCALE=3; // 고화질
+    const A4W_PX=794*SCALE;
+    const wrap=document.createElement('div');
+    wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${A4W_PX/SCALE}px;background:#f5f4f0;padding:16px;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
 
-    // 한글 지원 폰트 로드
-    pdf.setFont('helvetica');
+    // 헤더
+    wrap.innerHTML=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:2px solid #2563eb"><div style="width:24px;height:24px;background:#2563eb;border-radius:6px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:900;font-size:12px">S</div><div style="font-size:13px;font-weight:700;color:#1a1917">물리1 풀이 분석기<span style="font-size:10px;color:#a8a49e;font-weight:400;margin-left:8px">${today}</span></div></div>`;
 
-    const newPage=()=>{
-      pdf.addPage();
-      pageNum++;
-      curY=MG;
-    };
-
-    const checkY=(need=6)=>{if(curY+need>PH-MG)newPage();};
-
-    // 텍스트 줄바꿈 처리
-    const splitText=(text,maxWidth,fontSize)=>{
-      pdf.setFontSize(fontSize);
-      return pdf.splitTextToSize(text,maxWidth);
-    };
-
-    // 한 줄 출력
-    const writeLine=(text,opts={})=>{
-      const {fontSize=10,color=[26,25,23],bold=false,indent=0,bg=null,bgH=6}=opts;
-      pdf.setFontSize(fontSize);
-      pdf.setTextColor(...color);
-      pdf.setFont('helvetica', bold?'bold':'normal');
-      const lines=splitText(text,TW-indent,fontSize);
-      lines.forEach((line,i)=>{
-        checkY(LH);
-        if(bg){
-          pdf.setFillColor(...bg);
-          pdf.roundedRect(MG,curY-4,TW,bgH,1,1,'F');
-        }
-        pdf.text(line,MG+indent,curY);
-        curY+=LH;
+    // 카드 복제
+    Array.from(rc.children).forEach(card=>{
+      const cl=card.cloneNode(true);
+      cl.style.marginBottom='12px';
+      cl.style.borderRadius='12px';
+      cl.style.boxShadow='0 1px 3px rgba(0,0,0,.08)';
+      cl.querySelectorAll('*').forEach(el=>{
+        el.style.maxHeight='none';
+        el.style.overflow='visible';
       });
-    };
+      wrap.appendChild(cl);
+    });
+    document.body.appendChild(wrap);
 
-    // 구분선
-    const drawLine=(color=[226,224,216],thick=0.3)=>{
-      checkY(3);
-      pdf.setDrawColor(...color);
-      pdf.setLineWidth(thick);
-      pdf.line(MG,curY,PW-MG,curY);
-      curY+=3;
-    };
+    // 폰트 로드 대기
+    await document.fonts.ready;
+    await new Promise(r=>setTimeout(r,300));
 
-    // 카드 헤더
-    const drawCardHeader=(title,isTotal=false)=>{
-      checkY(10);
-      const bg=isTotal?[26,25,23]:[240,239,233];
-      const tc=isTotal?[255,255,255]:[26,25,23];
-      pdf.setFillColor(...bg);
-      pdf.roundedRect(MG,curY-4,TW,8,1.5,1.5,'F');
-      pdf.setFontSize(11);pdf.setFont('helvetica','bold');
-      pdf.setTextColor(...tc);
-      pdf.text(title,MG+4,curY+1);
-      curY+=8;
-    };
+    // 고화질 캡처
+    const canvas=await html2canvas(wrap,{
+      scale:SCALE,
+      useCORS:true,
+      backgroundColor:'#f5f4f0',
+      logging:false,
+      windowWidth:A4W_PX/SCALE,
+    });
+    document.body.removeChild(wrap);
 
-    // ▶ 섹션 제목
-    const drawSection=(title)=>{
-      checkY(8);
-      pdf.setFillColor(37,99,235);
-      pdf.rect(MG,curY-3.5,2.5,5,'F');
-      pdf.setFontSize(9);pdf.setFont('helvetica','bold');
-      pdf.setTextColor(107,104,96);
-      pdf.text(title.replace(/^▶\s*/,'').toUpperCase(),MG+5,curY);
-      curY+=6;
-    };
+    // A4 PDF로 페이지 분할
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    const PW=210,PH=297,MG=8;
+    const printW=PW-MG*2;
+    const printH=PH-MG*2;
+    const pxPerMm=canvas.width/printW;
+    const pageHeightPx=printH*pxPerMm;
+    let srcY=0;
+    let isFirst=true;
 
-    // 풀이 단계 박스
-    const drawStep=(num,text)=>{
-      checkY(8);
-      pdf.setFillColor(240,239,233);
-      pdf.roundedRect(MG,curY-4,TW,7,1,1,'F');
-      pdf.setFillColor(37,99,235);
-      pdf.setFontSize(8);pdf.setFont('helvetica','bold');
-      pdf.setTextColor(255,255,255);
-      pdf.text(String(num),MG+3,curY);
-      pdf.setFont('helvetica','normal');
-      pdf.setTextColor(26,25,23);
-      const lines=splitText(text,TW-14,9);
-      pdf.text(lines[0]||'',MG+9,curY);
-      curY+=7;
-      if(lines.length>1){
-        lines.slice(1).forEach(l=>{
-          checkY(5);
-          writeLine(l,{fontSize:9,indent:9});
-        });
-      }
-    };
+    while(srcY<canvas.height){
+      if(!isFirst)pdf.addPage();
+      isFirst=false;
+      const sliceH=Math.min(pageHeightPx,canvas.height-srcY);
+      const sc=document.createElement('canvas');
+      sc.width=canvas.width;
+      sc.height=Math.ceil(sliceH);
+      sc.getContext('2d').drawImage(canvas,0,srcY,canvas.width,sliceH,0,0,sc.width,sc.height);
+      const imgH=sliceH/pxPerMm;
+      pdf.addImage(sc.toDataURL('image/jpeg',0.95),'JPEG',MG,MG,printW,imgH);
 
-    // 역량 점수 3개 나란히
-    const drawScores=(scores)=>{
-      checkY(22);
-      const bw=(TW-4)/3;
-      scores.forEach((s,i)=>{
-        const x=MG+i*(bw+2);
-        const col=s.score>=10?[22,163,74]:s.score>=8?[37,99,235]:s.score>=6?[217,119,6]:[220,38,38];
-        pdf.setFillColor(255,255,255);
-        pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.3);
-        pdf.roundedRect(x,curY-2,bw,20,1.5,1.5,'FD');
-        pdf.setFontSize(8);pdf.setFont('helvetica','normal');pdf.setTextColor(107,104,96);
-        pdf.text(s.label,x+3,curY+3);
-        pdf.setFontSize(16);pdf.setFont('helvetica','bold');pdf.setTextColor(...col);
-        pdf.text(String(s.score),x+3,curY+10);
-        pdf.setFontSize(7);pdf.setFont('helvetica','normal');pdf.setTextColor(168,164,158);
-        pdf.text('/10',x+3+8,curY+10);
-        if(s.reason&&s.reason!=='만점'){
-          pdf.setFontSize(7);pdf.setTextColor(107,104,96);
-          const rl=splitText(s.reason,bw-6,7);
-          pdf.text(rl[0]||'',x+3,curY+15);
-        }
-      });
-      curY+=23;
-    };
-
-    // 합계
-    const drawTotal=(score)=>{
-      checkY(7);
-      pdf.setFontSize(10);pdf.setFont('helvetica','normal');pdf.setTextColor(107,104,96);
-      pdf.text('합계',PW-MG-30,curY,{align:'right'});
-      pdf.setFontSize(14);pdf.setFont('helvetica','bold');pdf.setTextColor(22,163,74);
-      pdf.text(String(score),PW-MG-20,curY,{align:'right'});
-      pdf.setFontSize(9);pdf.setFont('helvetica','normal');pdf.setTextColor(168,164,158);
-      pdf.text('/30점',PW-MG,curY,{align:'right'});
-      curY+=6;
-    };
-
-    // 표 행
-    const drawTableRow=(cells,isHeader=false,isAvg=false)=>{
-      checkY(7);
-      const cw=[20,18,28,28,28,22]; // 문제/정오답/개념/전개/해석/합계
-      const bg=isHeader||isAvg?[240,239,233]:[255,255,255];
-      pdf.setFillColor(...bg);
-      pdf.rect(MG,curY-4,TW,6.5,'F');
-      pdf.setFontSize(8);pdf.setFont('helvetica',isHeader||isAvg?'bold':'normal');
-      let cx=MG;
-      cells.forEach((cell,ci)=>{
-        const oxColor=cell==='O'?[22,163,74]:cell==='X'?[220,38,38]:null;
-        if(oxColor)pdf.setTextColor(...oxColor);
-        else pdf.setTextColor(26,25,23);
-        pdf.text(String(cell),cx+cw[ci]/2,curY,{align:'center'});
-        cx+=cw[ci];
-      });
-      pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.2);
-      pdf.line(MG,curY+2.5,PW-MG,curY+2.5);
-      curY+=6.5;
-    };
-
-    // ── 본문 파싱 ──
-    const lines=lastRawText.split('\n');
-    let inCard=false,currentTitle='',buf=[];
-    let curSection='',scores=[],totalScore=0;
-    let inTable=false,tableRows=[];
-
-    const flushSection=()=>{
-      if(!curSection)return;
-      drawSection(curSection);
-      curSection='';
-    };
-
-    const flushTable=()=>{
-      if(!inTable||!tableRows.length)return;
-      tableRows.forEach((row,ri)=>{
-        const isH=ri===0;
-        const isA=row[0]==='평균';
-        drawTableRow(row,isH,isA);
-      });
-      inTable=false;tableRows=[];
-      curY+=2;
-    };
-
-    const flushScores=()=>{
-      if(!scores.length)return;
-      drawScores(scores);
-      scores=[];
-    };
-
-    for(let i=0;i<lines.length;i++){
-      const raw=lines[i];
-      const t=raw.trim();
-
-      // ===== 구분선
-      if(/^={4,}/.test(t)){
-        flushScores();flushTable();
-        const next=(lines[i+1]||'').trim();
-        if(next&&!/^={4,}/.test(next)){
-          i++;
-          const isTotal=next.includes('총평');
-          if(inCard){curY+=4;drawLine();}
-          curY+=2;
-          drawCardHeader(next,isTotal);
-          curY+=2;
-          inCard=true;
-          if((lines[i+1]||'').trim().startsWith('='))i++;
-        }
-        continue;
-      }
-
-      if(!inCard)continue;
-
-      // ▶ 섹션
-      if(/^▶/.test(t)){
-        flushScores();flushTable();
-        curSection=t;
-        flushSection();
-        continue;
-      }
-
-      // 풀이 단계
-      const stepM=t.match(/^(\d+)단계[:\s]+(.*)/);
-      if(stepM){drawStep(stepM[1],stepM[2]);continue;}
-
-      // 역량 점수
-      const scoreM=t.match(/^-\s+(개념 이해도|풀이 전개력|문제 해석력):\s*(\d+)점\s*\/\s*10점(?:\s*\|\s*이유:\s*(.*))?/);
-      if(scoreM){
-        scores.push({label:scoreM[1],score:parseInt(scoreM[2]),reason:scoreM[3]||''});
-        if(scores.length===3)flushScores();
-        continue;
-      }
-
-      // 합계
-      const totalM=t.match(/^-\s+합계:\s*(\d+)점\s*\/\s*30점/);
-      if(totalM){flushScores();drawTotal(parseInt(totalM[1]));continue;}
-
-      // 파이프 표
-      if(/^\|/.test(t)){
-        if(/^\|[-| :]+\|$/.test(t))continue; // 구분선 스킵
-        const cells=t.split('|').map(c=>c.trim()).filter(c=>c);
-        if(!inTable){inTable=true;tableRows=[];}
-        tableRows.push(cells);
-        continue;
-      }
-      if(inTable){flushTable();}
-
-      // 일반 - 항목
-      if(/^-\s+/.test(t)){
-        flushScores();
-        writeLine(t,{fontSize:9,color:[26,25,23],indent:2});
-        continue;
-      }
-
-      // 정답/정오답 값 (①~⑤, O, X)
-      if(/^[①②③④⑤]$/.test(t)){
-        writeLine(t,{fontSize:13,bold:true,color:[37,99,235]});continue;
-      }
-      if(t==='O'){writeLine(t,{fontSize:13,bold:true,color:[22,163,74]});continue;}
-      if(t==='X'){writeLine(t,{fontSize:13,bold:true,color:[220,38,38]});continue;}
-
-      // 빈 줄
-      if(!t){curY+=2;continue;}
-
-      // 일반 텍스트
-      writeLine(t,{fontSize:9});
-    }
-
-    flushScores();flushTable();
-
-    // 페이지 번호
-    const totalPages=pdf.getNumberOfPages();
-    for(let p=1;p<=totalPages;p++){
-      pdf.setPage(p);
-      pdf.setFontSize(8);pdf.setFont('helvetica','normal');pdf.setTextColor(168,164,158);
-      pdf.text(`${p} / ${totalPages}`,PW/2,PH-6,{align:'center'});
-      pdf.text('물리1 풀이 분석기',MG,PH-6);
-      pdf.text(today,PW-MG,PH-6,{align:'right'});
+      // 페이지 번호
+      const totalPagesEst=Math.ceil(canvas.height/pageHeightPx);
+      pdf.setFontSize(8);pdf.setTextColor(168,164,158);
+      pdf.text(`${Math.round(srcY/pageHeightPx)+1}`,PW/2,PH-4,{align:'center'});
+      srcY+=sliceH;
     }
 
     pdf.save(fname);
