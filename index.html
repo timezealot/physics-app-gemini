@@ -715,19 +715,19 @@ async function downloadPDF(){
     const fname=`물리1_분석결과_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`;
     const today=d.toLocaleDateString('ko-KR');
     const SCALE=2;
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     const PW=210,PH=297,MG=8,GAP=4;
-    // 2×2 그리드: 셀 너비/높이
     const cellW=(PW-MG*2-GAP)/2;
-    const cellH=(PH-MG*2-GAP*2)/2; // 상단 헤더 여백 포함
+    const CELL_PX=Math.round(cellW*3.7795);
 
-    // 폰트 로드 대기
     await document.fonts.ready;
     await new Promise(r=>setTimeout(r,200));
 
-    // 카드 한 장 캡처 - 셀 너비에 맞게 렌더링해서 자연스럽게 꽉 채움
+    const allCards=Array.from(rc.children);
+    const probCards=allCards.filter(el=>el.classList.contains('prob-card'));
+    const totalCards=allCards.filter(el=>el.classList.contains('total-card'));
+
+    // 카드 캡처 (셀 너비 기준)
     const captureCard=async(cardEl)=>{
-      const CELL_PX=Math.round(cellW*3.7795); // 셀 너비를 px로
       const wrap=document.createElement('div');
       wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${CELL_PX}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
       const cl=cardEl.cloneNode(true);
@@ -745,59 +745,57 @@ async function downloadPDF(){
       return canvas;
     };
 
-    // 카드를 x,y 위치에 배치 - 너비 cellW 고정, 높이 비율 유지 (cellH 초과 시 축소)
-    const placeCard=async(cardEl,x,y)=>{
-      const canvas=await captureCard(cardEl);
-      // canvas는 이미 cellW 너비로 렌더링됨 → 그대로 cellW로 삽입
-      const naturalH=canvas.height/canvas.width*cellW; // 비율 유지 높이
-      const fitH=Math.min(naturalH,cellH);
-      const fitW=fitH===naturalH ? cellW : cellW*(fitH/naturalH);
-      pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',x,y,fitW,fitH);
-    };
+    const canvasToMmH=(canvas)=>canvas.height/canvas.width*cellW;
 
-    // 2×2 그리드 위치
-    const positions=[
-      {x:MG,           y:MG},
-      {x:MG+cellW+GAP, y:MG},
-      {x:MG,           y:MG+cellH+GAP},
-      {x:MG+cellW+GAP, y:MG+cellH+GAP},
-    ];
-
-    const allCards=Array.from(rc.children);
-    const probCards=allCards.filter(el=>el.classList.contains('prob-card'));
-    const totalCards=allCards.filter(el=>el.classList.contains('total-card'));
-
-    // 문제 카드 4개씩 페이지 배치
+    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
+    let pageNum=1;
+    let curY=MG;
     let isFirstPage=true;
-    for(let i=0;i<probCards.length;i++){
-      const posIdx=i%4;
-      if(posIdx===0){
-        if(!isFirstPage) pdf.addPage();
-        isFirstPage=false;
-        // 페이지 구분선
-        pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.3);
-        // 세로 중앙선
-        pdf.line(MG+cellW+GAP/2, MG, MG+cellW+GAP/2, PH-MG);
-        // 가로 중앙선
-        pdf.line(MG, MG+cellH+GAP/2, PW-MG, MG+cellH+GAP/2);
-        // 페이지 번호
-        pdf.setFontSize(7);pdf.setTextColor(168,164,158);
-        pdf.setFont('helvetica','normal');
-        pdf.text(`${Math.floor(i/4)+1}`,PW/2,PH-2,{align:'center'});
-        pdf.text(today,PW-MG,PH-2,{align:'right'});
+
+    // 문제 카드 2개씩 행으로 처리 — 각 행 높이는 두 카드 중 큰 것에 맞춤
+    for(let i=0;i<probCards.length;i+=2){
+      const c1=await captureCard(probCards[i]);
+      const c2=probCards[i+1]?await captureCard(probCards[i+1]):null;
+      const h1=canvasToMmH(c1);
+      const h2=c2?canvasToMmH(c2):0;
+      const rowH=Math.max(h1,h2);
+
+      // 페이지 넘침 → 새 페이지
+      if(!isFirstPage&&curY+rowH>PH-MG){
+        pdf.setFontSize(7);pdf.setTextColor(168,164,158);pdf.setFont('helvetica','normal');
+        pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
+        pdf.text(today,PW-MG,PH-3,{align:'right'});
+        pdf.addPage();pageNum++;curY=MG;
       }
-      const pos=positions[posIdx];
-      await placeCard(probCards[i],pos.x,pos.y);
+      isFirstPage=false;
+
+      // 행 구분선 (첫 행 제외)
+      if(curY>MG+1){
+        pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.2);
+        pdf.line(MG,curY-GAP/2,PW-MG,curY-GAP/2);
+      }
+      // 세로 중앙 구분선
+      pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.2);
+      pdf.line(MG+cellW+GAP/2,curY,MG+cellW+GAP/2,curY+rowH);
+
+      pdf.addImage(c1.toDataURL('image/jpeg',0.93),'JPEG',MG,curY,cellW,h1);
+      if(c2)pdf.addImage(c2.toDataURL('image/jpeg',0.93),'JPEG',MG+cellW+GAP,curY,cellW,h2);
+      curY+=rowH+GAP;
     }
 
-    // 총평 (별도 페이지, 전체 너비)
+    // 마지막 페이지 번호
+    pdf.setFontSize(7);pdf.setTextColor(168,164,158);pdf.setFont('helvetica','normal');
+    pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
+    pdf.text(today,PW-MG,PH-3,{align:'right'});
+
+    // 총평 (별도 페이지)
     if(totalCards.length>0){
-      pdf.addPage();
-      let curY=MG;
+      pdf.addPage();pageNum++;
+      const FULL_PX=Math.round((PW-MG*2)*3.7795);
+      let ty=MG;
       for(const card of totalCards){
-        const RENDER_W=Math.round((PW-MG*2)*3.7795);
         const wrap=document.createElement('div');
-        wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
+        wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${FULL_PX}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
         const cl=card.cloneNode(true);
         cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;';
         cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
@@ -805,17 +803,16 @@ async function downloadPDF(){
         document.body.appendChild(wrap);
         await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
         await new Promise(r=>setTimeout(r,50));
-        const canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:RENDER_W,windowWidth:RENDER_W});
+        const canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:FULL_PX,windowWidth:FULL_PX});
         document.body.removeChild(wrap);
-        const fitW=PW-MG*2;
-        const fitH=(canvas.height/SCALE*25.4/96)*(fitW/(canvas.width/SCALE*25.4/96));
-        if(curY+fitH>PH-MG){pdf.addPage();curY=MG;}
-        pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',MG,curY,fitW,fitH);
-        curY+=fitH+GAP;
+        const fw=PW-MG*2,fh=canvas.height/canvas.width*fw;
+        if(ty+fh>PH-MG){pdf.addPage();pageNum++;ty=MG;}
+        pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',MG,ty,fw,fh);
+        ty+=fh+GAP;
       }
       pdf.setFontSize(7);pdf.setTextColor(168,164,158);
-      pdf.text(`${Math.floor((probCards.length-1)/4)+2}`,PW/2,PH-2,{align:'center'});
-      pdf.text(today,PW-MG,PH-2,{align:'right'});
+      pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
+      pdf.text(today,PW-MG,PH-3,{align:'right'});
     }
 
     pdf.save(fname);
