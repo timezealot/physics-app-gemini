@@ -422,15 +422,11 @@ async function analyze(){
 
 규칙:
 - 풀이법(▶3): [해설]에 나온 내용만. 추론·창작·보완 금지. 수식은 일반텍스트(×÷=→).
-- 정답(▶1): [해설]에서 확인, 원문자(①②③④⑤)만. 직접계산 금지.
-- 정오답(▶2): 학생정답↔해설정답 비교, O/X만.
-- 피드백(▶4): [해설]의 풀이 흐름을 기준으로 학생 풀이의 논리 흐름을 평가하세요.
-  * 학생이 어떤 개념·조건을 파악했는지, 어떤 순서로 식을 세웠는지 확인하세요.
-  * 해설과 비교해 학생 풀이에서 빠진 논리 단계, 불명확한 부분, 더 나은 접근법을 안내하세요.
-  * 정답을 맞혔어도 해설보다 비효율적이거나 논리 단계가 생략됐으면 개선점을 구체적으로 작성하세요.
-  * 해설에 없는 오류를 창작하거나 계산식을 직접 검증하지 마세요. 판단 기준은 오직 [해설]입니다.
-  * 절대로 [해설]에 등장하지 않는 물리 개념(예: 장력, 마찰력, 수직항력 등)을 언급하지 마세요. 해당 문제의 [해설]에 실제로 나온 개념과 기호만 사용하세요.
-- 점수(▶5): 해설기준 평가. "평가불가" 금지. 형식: X점/10점|이유:한문장
+- 학생풀이정리(▶4): [학생풀이] 이미지에서 해당 문제의 풀이를 찾아 학생이 세운 식·계산과정·최종 답을 있는 그대로 정리. 각 문제별로 다르게 작성. 추측·창작 금지.
+- 피드백(▶5): ▶4에서 정리한 학생 풀이를 [해설] 풀이와 비교해 작성. 모든 문제에 동일한 피드백 금지. 학생이 실제 쓴 식·수치를 언급하며 구체적으로 작성.
+  * 해설에 없는 오류를 창작하거나 계산식을 직접 검증하지 마세요.
+  * 절대로 [해설]에 등장하지 않는 물리 개념을 언급하지 마세요.
+- 점수(▶6): 해설기준 평가. "평가불가" 금지. 형식: X점/10점|이유:한문장
 - 형식(▶ =====) 변경금지. LaTeX금지. 인사말금지. 각블록 독립.
 - 이미지: m/2m=질량(kg), mg/2mg=중력(N). g유무 확인. 질감→질량, 막돼→막대, 마철→마찰.`;
 
@@ -448,11 +444,16 @@ O
 2단계:
 3단계:
 4단계:
-▶ 4. 풀이 피드백
-- 학생 풀이 흐름: 
-- 해설 기준 평가: 
-- 개선점: 
-▶ 5. 역량 점수
+▶ 4. 학생 풀이 정리
+※ [학생풀이] 이미지에서 이 문제의 풀이를 찾아 아래 항목을 채우세요.
+- 학생이 세운 식:
+- 학생의 계산 과정:
+- 학생의 최종 답:
+▶ 5. 풀이 피드백
+※ 위 ▶4의 학생 풀이 정리를 기반으로 해설과 비교해 작성하세요.
+- 해설 기준 평가:
+- 개선점:
+▶ 6. 역량 점수
 - 개념 이해도: X점 / 10점 | 이유:
 - 풀이 전개력: X점 / 10점 | 이유:
 - 문제 해석력: X점 / 10점 | 이유:
@@ -493,7 +494,7 @@ O
       ? '\n\n[정답 목록 — 선생님 입력값, 절대적으로 신뢰하세요]\n'+bulkCorrEntries.map(([n,v])=>`문제 ${n}번 정답: ${v}`).join('\n')
       : '';
 
-    parts.push({type:'text',text:'[해설] 아래 이미지들에서 각 문제의 정답과 풀이 과정을 읽으세요. 수식·분수·계수·첨자를 정확히 읽고 추측하지 마세요.'});
+    parts.push({type:'text',text:'[해설] 아래 이미지에서 각 문제의 정답과 풀이 과정을 읽으세요. 문제마다 해설의 수식·수치·풀이 단계가 다릅니다. 각 문제를 개별적으로 읽고, 해당 문제의 실제 식과 수치를 그대로 사용하세요. 추측하거나 다른 문제 해설을 섞지 마세요.'});
     if(aT)parts.push({type:'text',text:aT});
     bulkStore.a.forEach((img,ii)=>{
       parts.push({type:'text',text:`해설이미지${ii+1}/${bulkStore.a.length}: 이 이미지의 모든 수식과 숫자를 정확히 읽으세요. 특히 분수(분자/분모 구분), 계수(3mg·5mg 등), 첨자(d1·d2·T'·T'' 등)를 주의하세요.`});
@@ -507,13 +508,15 @@ O
       parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
     });
 
-    parts.push({type:'text',text:'[학생풀이] 손글씨 포함 전체를 읽어 피드백·점수에 반영'});
+    parts.push({type:'text',text:'[학생풀이] 아래는 학생이 직접 작성한 풀이 이미지입니다. 각 문제별로 학생의 손글씨 풀이 과정·계산식·최종 답을 꼼꼼히 읽어 피드백과 역량 점수에 반영하세요.'});
     if(sT)parts.push({type:'text',text:sT});
     bulkStore.s.forEach((img,ii)=>{
-      parts.push({type:'text',text:`풀이이미지${ii+1}`});
+      parts.push({type:'text',text:`학생풀이이미지${ii+1}/${bulkStore.s.length}: 이 이미지에서 각 문제의 학생 풀이 과정을 읽으세요. 학생이 어떤 식을 세웠는지, 계산 과정이 어떤지, 최종 답이 무엇인지 파악하세요.`});
       parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
     });
     feedbackFormat=`${range?`범위:${range}`:'모든 문제 분석.'}${bulkCorrText}${bulkAnsText}
+
+중요: [해설] 이미지에서 각 문제의 풀이를 개별적으로 찾아 읽으세요. 문제마다 해설에 나온 실제 수식·수치·풀이 단계가 다릅니다. 모든 문제에 동일한 풀이법을 쓰지 마세요. 각 문제 해설에 실제로 적힌 식과 수치를 그대로 사용하세요.
 =====로 시작. 앞 설명 금지. 평가불가 금지.${bulkCorrText?' 정답목록 우선.':''}
 반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
 완료후:${FMT_TOTAL}`;
@@ -758,7 +761,11 @@ async function downloadPDF(){
       return canvas;
     };
 
-    const canvasToMmH=(canvas)=>canvas.height/canvas.width*cellW;
+    // canvas px → mm 변환 (CELL_PX px = cellW mm 이므로 비율로 계산)
+    const canvasToMmH=(canvas)=>(canvas.height/canvas.width)*cellW;
+
+    // 카드가 한 페이지를 넘으면 축소해서 맞춤
+    const MAX_ROW_H=PH-MG*2-10; // 한 행 최대 높이
 
     const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
     let pageNum=1;
@@ -769,12 +776,18 @@ async function downloadPDF(){
     for(let i=0;i<probCards.length;i+=2){
       const c1=await captureCard(probCards[i]);
       const c2=probCards[i+1]?await captureCard(probCards[i+1]):null;
-      const h1=canvasToMmH(c1);
-      const h2=c2?canvasToMmH(c2):0;
-      const rowH=Math.max(h1,h2);
+      let h1=canvasToMmH(c1);
+      let h2=c2?canvasToMmH(c2):0;
+      let rowH=Math.max(h1,h2);
 
-      // 페이지 넘침 → 새 페이지
-      if(!isFirstPage&&curY+rowH>PH-MG){
+      // 행이 너무 크면 페이지 전체로 축소
+      if(rowH>MAX_ROW_H){
+        const ratio=MAX_ROW_H/rowH;
+        h1*=ratio; h2*=ratio; rowH=MAX_ROW_H;
+      }
+
+      // 현재 위치에 안 들어가면 새 페이지로
+      if(!isFirstPage&&curY+rowH>PH-MG-5){
         pdf.setFontSize(7);pdf.setTextColor(168,164,158);pdf.setFont('helvetica','normal');
         pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
         pdf.text(today,PW-MG,PH-3,{align:'right'});
