@@ -482,60 +482,28 @@ O
     alert('사진 또는 텍스트를 입력해주세요.');goBack();return;
   }
 
-    // 학생 정답 목록 텍스트 생성
-    const bulkAnsEntries=Object.entries(bulkStudentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
-    const bulkAnsText=bulkAnsEntries.length>0
-      ? '\n\n[학생 선택 정답 목록 — 반드시 이 값으로 정오답을 판단하세요]\n'+bulkAnsEntries.map(([n,v])=>`문제 ${n}번: 학생 정답 = ${v}`).join('\n')
-      : '\n\n[학생 선택 정답: 입력 없음 — 학생 풀이 이미지에서 최종 선택을 찾아 판단하세요]';
+  // 정답/학생 정답 목록
+  const bulkAnsEntries=Object.entries(bulkStudentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+  const bulkCorrEntries=Object.entries(bulkCorrectAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
 
-    // 정답 목록 텍스트 생성
-    const bulkCorrEntries=Object.entries(bulkCorrectAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
-    const bulkCorrText=bulkCorrEntries.length>0
-      ? '\n\n[정답 목록 — 선생님 입력값, 절대적으로 신뢰하세요]\n'+bulkCorrEntries.map(([n,v])=>`문제 ${n}번 정답: ${v}`).join('\n')
-      : '';
-
-    parts.push({type:'text',text:'[해설] 아래 이미지에서 각 문제의 정답과 풀이 과정을 읽으세요. 문제마다 해설의 수식·수치·풀이 단계가 다릅니다. 각 문제를 개별적으로 읽고, 해당 문제의 실제 식과 수치를 그대로 사용하세요. 추측하거나 다른 문제 해설을 섞지 마세요.'});
-    if(aT)parts.push({type:'text',text:aT});
-    bulkStore.a.forEach((img,ii)=>{
-      parts.push({type:'text',text:`해설이미지${ii+1}/${bulkStore.a.length}: 이 이미지의 모든 수식과 숫자를 정확히 읽으세요. 특히 분수(분자/분모 구분), 계수(3mg·5mg 등), 첨자(d1·d2·T'·T'' 등)를 주의하세요.`});
-      parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
-    });
-
-    parts.push({type:'text',text:'[문제]'});
-    if(qT)parts.push({type:'text',text:qT});
-    bulkStore.q.forEach((img,ii)=>{
-      parts.push({type:'text',text:`문제이미지${ii+1}`});
-      parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
-    });
-
-    parts.push({type:'text',text:'[학생풀이] 아래는 학생이 직접 작성한 풀이 이미지입니다. 각 문제별로 학생의 손글씨 풀이 과정·계산식·최종 답을 꼼꼼히 읽어 피드백과 역량 점수에 반영하세요.'});
-    if(sT)parts.push({type:'text',text:sT});
-    bulkStore.s.forEach((img,ii)=>{
-      parts.push({type:'text',text:`학생풀이이미지${ii+1}/${bulkStore.s.length}: 이 이미지에서 각 문제의 학생 풀이 과정을 읽으세요. 학생이 어떤 식을 세웠는지, 계산 과정이 어떤지, 최종 답이 무엇인지 파악하세요.`});
-      parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
-    });
-    feedbackFormat=`${range?`범위:${range}`:'모든 문제 분석.'}${bulkCorrText}${bulkAnsText}
-
-중요: [해설] 이미지에서 각 문제의 풀이를 개별적으로 찾아 읽으세요. 문제마다 해설에 나온 실제 수식·수치·풀이 단계가 다릅니다. 모든 문제에 동일한 풀이법을 쓰지 마세요. 각 문제 해설에 실제로 적힌 식과 수치를 그대로 사용하세요.
-=====로 시작. 앞 설명 금지. 평가불가 금지.${bulkCorrText?' 정답목록 우선.':''}
-반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
-완료후:${FMT_TOTAL}`;
-  parts.push({type:'text',text:feedbackFormat});
-
-  try{
+  // 비스트리밍 호출 (OCR용)
+  const callOCR=async(ocrParts)=>{
     const res=await fetch('/api/proxy',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({apiKey,stream:false,messages:[{role:'user',content:ocrParts}]})
+    });
+    if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'OCR 오류');}
+    const data=await res.json();
+    return data.content?.map(c=>c.text||'').join('').trim()||'';
+  };
+
+  // 스트리밍 호출 함수
+  const streamCall=async(parts,onChunk)=>{
+    const res=await fetch('/api/proxy',{
+      method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({apiKey,system:SYSTEM,messages:[{role:'user',content:parts}]})
     });
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'API 오류');}
-
-    rc.innerHTML='';
-    let fullText='';
-    const sc=document.createElement('div');sc.className='prob-card';
-    sc.innerHTML=`<div style="padding:16px 18px"><div class="stream-text" id="streamText"></div></div>`;
-    rc.appendChild(sc);
-    const streamEl=document.getElementById('streamText');
     const reader=res.body.getReader();const decoder=new TextDecoder();let buf='';
     while(true){
       const{done,value}=await reader.read();if(done)break;
@@ -544,11 +512,125 @@ O
       for(const line of lines){
         if(!line.startsWith('data: '))continue;
         const d=line.slice(6).trim();if(d==='[DONE]')continue;
-        try{const j=JSON.parse(d);if(j.type==='content_block_delta'&&j.delta?.text){fullText+=j.delta.text;streamEl.textContent=fullText;}}catch{}
+        try{const j=JSON.parse(d);if(j.type==='content_block_delta'&&j.delta?.text)onChunk(j.delta.text);}catch{}
       }
     }
+  };
+
+  // UI 준비 (로딩 표시)
+  rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">🔍 해설 텍스트 변환 중...</div></div>`;
+  const setMsg=(msg)=>{const el=document.getElementById('loadingMsg');if(el)el.textContent=msg;};
+
+  // ── OCR: 해설 이미지 → 텍스트 변환 ──
+  let ocrText='';
+  if(bulkStore.a.length>0&&!aT){
+    try{
+      const ocrParts=[];
+      ocrParts.push({type:'text',text:`물리1 해설지 이미지입니다. 모든 문제의 정답과 풀이 과정을 텍스트로 변환하세요.
+규칙:
+- 각 문제 번호를 명확히 표시 (예: [문제1], [문제2])
+- 수식은 그대로 텍스트로: F×d=30×4, ΣF=0, Στ=0 등
+- 분수: 분자/분모 형태로 (예: 4L/13, 29/13mg)
+- 계수·첨자 정확히: 3mg, 5mg, d1, d2, T', T''
+- 정답 번호(①②③④⑤) 포함
+- 추측하지 말고 이미지에 보이는 것만 작성`});
+      bulkStore.a.forEach((img,ii)=>{
+        ocrParts.push({type:'text',text:`해설이미지${ii+1}`});
+        ocrParts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+      });
+      ocrText=await callOCR(ocrParts);
+    }catch(e){
+      console.warn('OCR 실패, 이미지 직접 사용:', e.message);
+      ocrText='';
+    }
+  } else {
+    ocrText=aT; // 텍스트로 직접 입력된 경우
+  }
+
+  // parts 생성 함수 (문제 범위 지정)
+  const makeParts=(startNum,endNum)=>{
+    const p=[];
+    const rangeLabel=`${startNum}번~${endNum}번 문제`;
+
+    // 해설: OCR 텍스트가 있으면 텍스트로, 없으면 이미지 직접 사용
+    if(ocrText){
+      p.push({type:'text',text:`[해설 텍스트 — OCR 변환 완료] ${rangeLabel}에 해당하는 부분을 사용하세요:\n${ocrText}`});
+    } else {
+      p.push({type:'text',text:`[해설] ${rangeLabel}의 정답과 풀이를 읽으세요. 수식·수치·풀이단계를 정확히 읽고 그대로 사용하세요.`});
+      if(aT)p.push({type:'text',text:aT});
+      bulkStore.a.forEach((img,ii)=>{
+        p.push({type:'text',text:`해설이미지${ii+1}: 분수·계수·첨자를 정확히 읽으세요.`});
+        p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+      });
+    }
+
+    // 문제
+    p.push({type:'text',text:`[문제] ${rangeLabel}`});
+    if(qT)p.push({type:'text',text:qT});
+    bulkStore.q.forEach((img,ii)=>{
+      p.push({type:'text',text:`문제이미지${ii+1}`});
+      p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+    });
+
+    // 학생풀이
+    p.push({type:'text',text:`[학생풀이] ${rangeLabel}의 학생 풀이입니다. 각 문제별 식·계산·최종 답을 읽어 피드백에 반영하세요.`});
+    if(sT)p.push({type:'text',text:sT});
+    bulkStore.s.forEach((img,ii)=>{
+      p.push({type:'text',text:`학생풀이이미지${ii+1}`});
+      p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+    });
+
+    // 해당 범위 정답/학생 정답
+    const corrSlice=bulkCorrEntries.filter(([n])=>parseInt(n)>=startNum&&parseInt(n)<=endNum);
+    const ansSlice=bulkAnsEntries.filter(([n])=>parseInt(n)>=startNum&&parseInt(n)<=endNum);
+    const corrText=corrSlice.length>0?'\n[정답 목록]\n'+corrSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'';
+    const ansText=ansSlice.length>0?'\n[학생 선택 정답]\n'+ansSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'\n[학생 선택 정답: 이미지에서 찾아 판단]';
+
+    const fmt=`${rangeLabel} 분석.${range?` 범위힌트:${range}`:''}${corrText}${ansText}
+${corrSlice.length>0?'정답목록 우선 사용.':''}
+각 문제 해설의 실제 수식을 그대로 사용. 문제마다 다른 풀이법 작성. 동일한 풀이 금지.
+=====로 시작. 앞 설명 금지. 평가불가 금지.
+반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}`;
+    p.push({type:'text',text:fmt});
+    return p;
+  };
+
+  try{
+    // 1차 호출: 1~4번
+    setMsg('⚡ 1~4번 분석 중...');
     rc.innerHTML='';
-    renderResult(fullText,rc);
+    let fullText='';
+    const sc=document.createElement('div');sc.className='prob-card';
+    sc.innerHTML=`<div style="padding:16px 18px"><div class="stream-text" id="streamText"></div></div>`;
+    rc.appendChild(sc);
+    const streamEl=document.getElementById('streamText');
+    await streamCall(makeParts(1,4),(chunk)=>{
+      fullText+=chunk;
+      streamEl.textContent=fullText;
+    });
+
+    // 2차 호출: 5~8번
+    setMsg('⚡ 5~8번 분석 중...');
+    let fullText2='';
+    const sc2=document.createElement('div');sc2.className='prob-card';
+    sc2.innerHTML=`<div style="padding:16px 18px"><div class="stream-text" id="streamText2"></div></div>`;
+    rc.appendChild(sc2);
+    const streamEl2=document.getElementById('streamText2');
+    await streamCall(makeParts(5,8),(chunk)=>{
+      fullText2+=chunk;
+      streamEl2.textContent=fullText2;
+    });
+
+    // 총평 호출
+    setMsg('⚡ 총평 작성 중...');
+    const totalParts=[{type:'text',text:`아래는 8개 문제 피드백 결과입니다. 이를 바탕으로 총평만 작성하세요.\n\n[1~4번 결과]\n${fullText}\n\n[5~8번 결과]\n${fullText2}\n\n총평 형식:${FMT_TOTAL}\n총평만 출력. 앞 설명 금지.`}];
+    let totalText='';
+    await streamCall(totalParts,(chunk)=>{totalText+=chunk;});
+
+    // 전체 합쳐서 렌더링
+    rc.innerHTML='';
+    renderResult(fullText+'\n'+fullText2+'\n'+totalText,rc);
+
   }catch(e){
     rc.innerHTML=`<div class="error-box">⚠️ 오류: ${e.message}<br><small>Google AI Studio에서 발급한 API Key(AIza...)를 확인해주세요.</small></div><button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
   }
