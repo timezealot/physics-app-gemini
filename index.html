@@ -412,6 +412,14 @@ async function analyze(){
 
   const SYSTEM=`물리1 교사. 학생 풀이 분석·피드백 작성.
 
+【이미지 정밀 읽기 — 가장 중요】
+[해설] 이미지의 수식·수치·기호를 읽을 때 반드시 다음을 지키세요:
+- 분수: 이미지에서 분자/분모를 정확히 구분. 예) 4L/13과 13L/4는 완전히 다름.
+- 계수: 숫자 앞 계수를 빠짐없이 읽기. 예) 3mg, 5mg, 29/13·mg 등.
+- 첨자: T', T'', d1, d2 등 첨자·번호를 정확히 구분.
+- 등호·화살표: = → 를 혼동하지 말 것.
+- 읽기 불확실한 수치는 추측하지 말고 이미지를 다시 확인할 것.
+
 규칙:
 - 풀이법(▶3): [해설]에 나온 내용만. 추론·창작·보완 금지. 수식은 일반텍스트(×÷=→).
 - 정답(▶1): [해설]에서 확인, 원문자(①②③④⑤)만. 직접계산 금지.
@@ -485,10 +493,10 @@ O
       ? '\n\n[정답 목록 — 선생님 입력값, 절대적으로 신뢰하세요]\n'+bulkCorrEntries.map(([n,v])=>`문제 ${n}번 정답: ${v}`).join('\n')
       : '';
 
-    parts.push({type:'text',text:'[해설]'});
+    parts.push({type:'text',text:'[해설] 아래 이미지들에서 각 문제의 정답과 풀이 과정을 읽으세요. 수식·분수·계수·첨자를 정확히 읽고 추측하지 마세요.'});
     if(aT)parts.push({type:'text',text:aT});
     bulkStore.a.forEach((img,ii)=>{
-      parts.push({type:'text',text:`해설이미지${ii+1}`});
+      parts.push({type:'text',text:`해설이미지${ii+1}/${bulkStore.a.length}: 이 이미지의 모든 수식과 숫자를 정확히 읽으세요. 특히 분수(분자/분모 구분), 계수(3mg·5mg 등), 첨자(d1·d2·T'·T'' 등)를 주의하세요.`});
       parts.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
     });
 
