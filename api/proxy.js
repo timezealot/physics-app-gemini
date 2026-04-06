@@ -72,8 +72,8 @@ export default async function handler(req) {
       },
     };
 
-    // gemini-2.5-flash — 수식 인식 정확도가 flash-lite보다 높음
-    const model = 'gemini-2.5-flash';
+    // gemini-2.5-flash-lite (stable) — 무료 티어, temperature 0으로 수식 정확도 유지
+    const model = 'gemini-2.5-flash-lite';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
     const res = await fetch(url, {
