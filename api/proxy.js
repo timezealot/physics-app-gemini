@@ -23,7 +23,7 @@ export default async function handler(req) {
     }
 
     // Anthropic parts → Gemini parts 변환
-    // 핵심: 모든 content 항목을 하나의 parts 배열로 합치기
+    // 텍스트와 이미지를 교차 배치 — 각 이미지 앞 지시문이 해당 이미지에만 적용되도록 합치지 않음
     const allParts = [];
     for (const msg of messages) {
       const content = Array.isArray(msg.content)
@@ -32,11 +32,12 @@ export default async function handler(req) {
 
       for (const part of content) {
         if (part.type === 'text') {
-          // 연속된 텍스트는 합치기
-          if (allParts.length > 0 && allParts[allParts.length - 1].text !== undefined) {
-            allParts[allParts.length - 1].text += '\n' + part.text;
+          // 바로 앞이 이미지면 새 텍스트 블록, 아니면 합치기
+          const prev = allParts[allParts.length - 1];
+          if (prev && prev.text !== undefined && !prev._afterImage) {
+            prev.text += '\n' + part.text;
           } else {
-            allParts.push({ text: part.text });
+            allParts.push({ text: part.text, _afterImage: false });
           }
         } else if (part.type === 'image') {
           allParts.push({
@@ -45,21 +46,34 @@ export default async function handler(req) {
               data: part.source.data,
             }
           });
+          // 다음 텍스트가 새 블록으로 시작하도록 마킹
+          allParts.push({ text: '', _afterImage: true });
         }
       }
     }
 
+    // _afterImage 마킹 제거하고 빈 텍스트 정리
+    const cleanParts = allParts
+      .map(p => {
+        if (p.inlineData) return p;
+        const { _afterImage, ...rest } = p;
+        return rest;
+      })
+      .filter(p => p.inlineData || (p.text && p.text.trim()));
+
     const geminiBody = {
-      contents: [{ role: 'user', parts: allParts }],
+      contents: [{ role: 'user', parts: cleanParts }],
       systemInstruction: system ? { parts: [{ text: system }] } : undefined,
       generationConfig: {
         maxOutputTokens: 16000,
-        temperature: 0.7,
+        temperature: 0,        // 수식·수치 읽기는 결정론적으로
+        topP: 0.95,
+        topK: 40,
       },
     };
 
-    // gemini-2.5-flash-lite (stable) — 무료 티어 하루 1,000회
-    const model = 'gemini-2.5-flash-lite';
+    // gemini-2.5-flash — 수식 인식 정확도가 flash-lite보다 높음
+    const model = 'gemini-2.5-flash';
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
 
     const res = await fetch(url, {
@@ -103,7 +117,9 @@ export default async function handler(req) {
               if (!d || d === '[DONE]') continue;
               try {
                 const j = JSON.parse(d);
-                const text = j.candidates?.[0]?.content?.parts?.[0]?.text;
+                // 모든 parts의 text를 합쳐서 전달
+                const text = j.candidates?.[0]?.content?.parts
+                  ?.map(p => p.text || '').join('') || '';
                 if (text) {
                   const out = JSON.stringify({
                     type: 'content_block_delta',
