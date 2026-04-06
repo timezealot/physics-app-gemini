@@ -730,38 +730,42 @@ async function downloadPDF(){
     const d=new Date();
     const fname=`물리1_분석결과_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`;
     const today=d.toLocaleDateString('ko-KR');
-    const SCALE=2;
+    const SCALE=3;
     const PW=210,PH=297,MG=8,GAP=4;
     const cellW=(PW-MG*2-GAP)/2;
-    const CELL_PX=Math.round(cellW*3.7795);
+    // 렌더링은 화면 카드 너비(450px)로 해서 레이아웃 유지, PDF에 넣을 때 cellW로 축소
+    const RENDER_W=450;
 
     await document.fonts.ready;
-    await new Promise(r=>setTimeout(r,200));
+    await new Promise(r=>setTimeout(r,300));
 
     const allCards=Array.from(rc.children);
     const probCards=allCards.filter(el=>el.classList.contains('prob-card'));
     const totalCards=allCards.filter(el=>el.classList.contains('total-card'));
 
-    // 카드 캡처 (셀 너비 기준)
+    // 카드 캡처 (화면 너비 450px 기준으로 렌더링)
     const captureCard=async(cardEl)=>{
       const wrap=document.createElement('div');
-      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${CELL_PX}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
+      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
       const cl=cardEl.cloneNode(true);
       cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;box-sizing:border-box;';
-      cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
+      cl.querySelectorAll('*').forEach(el=>{
+        el.style.maxHeight='none';
+        el.style.overflow='visible';
+      });
       wrap.appendChild(cl);
       document.body.appendChild(wrap);
       await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-      await new Promise(r=>setTimeout(r,50));
+      await new Promise(r=>setTimeout(r,80));
       const canvas=await html2canvas(wrap,{
         scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,
-        width:CELL_PX,windowWidth:CELL_PX,
+        width:RENDER_W,windowWidth:RENDER_W,
       });
       document.body.removeChild(wrap);
       return canvas;
     };
 
-    // canvas px → mm 변환 (CELL_PX px = cellW mm 이므로 비율로 계산)
+    // canvas → mm 변환: 렌더링 너비(RENDER_W px) = cellW mm
     const canvasToMmH=(canvas)=>(canvas.height/canvas.width)*cellW;
 
     // 카드가 한 페이지를 넘으면 축소해서 맞춤
@@ -817,23 +821,23 @@ async function downloadPDF(){
     // 총평 (별도 페이지)
     if(totalCards.length>0){
       pdf.addPage();pageNum++;
-      const FULL_PX=Math.round((PW-MG*2)*3.7795);
+      const TOTAL_RENDER_W=900;
       let ty=MG;
       for(const card of totalCards){
         const wrap=document.createElement('div');
-        wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${FULL_PX}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
+        wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${TOTAL_RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
         const cl=card.cloneNode(true);
         cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;';
         cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
         wrap.appendChild(cl);
         document.body.appendChild(wrap);
         await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-        await new Promise(r=>setTimeout(r,50));
-        const canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:FULL_PX,windowWidth:FULL_PX});
+        await new Promise(r=>setTimeout(r,80));
+        const canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:TOTAL_RENDER_W,windowWidth:TOTAL_RENDER_W});
         document.body.removeChild(wrap);
         const fw=PW-MG*2,fh=canvas.height/canvas.width*fw;
         if(ty+fh>PH-MG){pdf.addPage();pageNum++;ty=MG;}
-        pdf.addImage(canvas.toDataURL('image/jpeg',0.93),'JPEG',MG,ty,fw,fh);
+        pdf.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',MG,ty,fw,fh);
         ty+=fh+GAP;
       }
       pdf.setFontSize(7);pdf.setTextColor(168,164,158);
