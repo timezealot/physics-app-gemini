@@ -130,22 +130,22 @@ textarea::placeholder{color:var(--text3);}
       <div class="bulk-grid">
         <div class="bulk-zone">
           <div class="bulk-zone-header"><span class="bulk-zone-title">📝 문제 사진 / 텍스트</span><span class="img-badge" id="bulk-badge-q" style="display:none"></span></div>
-          <label class="bulk-drop-area" for="bulk-file-q"><span class="bulk-drop-icon">📷</span><span class="bulk-drop-text">사진 추가</span><span class="bulk-drop-sub">한 장에 여러 문제 OK</span></label>
-          <input class="bulk-file-input" type="file" id="bulk-file-q" accept="image/*" multiple onchange="bulkUpload('q',this)"/>
+          <label class="bulk-drop-area" for="bulk-file-q"><span class="bulk-drop-icon">📷</span><span class="bulk-drop-text">사진 / PDF 추가</span><span class="bulk-drop-sub">한 장에 여러 문제 OK</span></label>
+          <input class="bulk-file-input" type="file" id="bulk-file-q" accept="image/*,application/pdf" multiple onchange="bulkUpload('q',this)"/>
           <div class="bulk-preview-grid" id="bulk-preview-q"></div>
           <textarea class="bulk-text-area" id="bulk-text-q" placeholder="텍스트로 입력하거나 사진과 함께 사용 가능"></textarea>
         </div>
         <div class="bulk-zone">
           <div class="bulk-zone-header"><span class="bulk-zone-title">✅ 정답·해설 사진 / 텍스트</span><span class="img-badge" id="bulk-badge-a" style="display:none"></span></div>
-          <label class="bulk-drop-area" for="bulk-file-a"><span class="bulk-drop-icon">📷</span><span class="bulk-drop-text">사진 추가</span><span class="bulk-drop-sub">한 장에 여러 정답 OK</span></label>
-          <input class="bulk-file-input" type="file" id="bulk-file-a" accept="image/*" multiple onchange="bulkUpload('a',this)"/>
+          <label class="bulk-drop-area" for="bulk-file-a"><span class="bulk-drop-icon">📷</span><span class="bulk-drop-text">사진 / PDF 추가</span><span class="bulk-drop-sub">한 장에 여러 정답 OK</span></label>
+          <input class="bulk-file-input" type="file" id="bulk-file-a" accept="image/*,application/pdf" multiple onchange="bulkUpload('a',this)"/>
           <div class="bulk-preview-grid" id="bulk-preview-a"></div>
           <textarea class="bulk-text-area" id="bulk-text-a" placeholder="텍스트로 입력하거나 사진과 함께 사용 가능"></textarea>
         </div>
         <div class="bulk-zone">
           <div class="bulk-zone-header"><span class="bulk-zone-title">✏️ 학생 풀이 사진 / 텍스트</span><span class="img-badge" id="bulk-badge-s" style="display:none"></span></div>
-          <label class="bulk-drop-area" for="bulk-file-s"><span class="bulk-drop-icon">📷</span><span class="bulk-drop-text">사진 추가</span><span class="bulk-drop-sub">한 장에 여러 풀이 OK</span></label>
-          <input class="bulk-file-input" type="file" id="bulk-file-s" accept="image/*" multiple onchange="bulkUpload('s',this)"/>
+          <label class="bulk-drop-area" for="bulk-file-s"><span class="bulk-drop-icon">📷</span><span class="bulk-drop-text">사진 / PDF 추가</span><span class="bulk-drop-sub">한 장에 여러 풀이 OK</span></label>
+          <input class="bulk-file-input" type="file" id="bulk-file-s" accept="image/*,application/pdf" multiple onchange="bulkUpload('s',this)"/>
           <div class="bulk-preview-grid" id="bulk-preview-s"></div>
           <textarea class="bulk-text-area" id="bulk-text-s" placeholder="텍스트로 입력하거나 사진과 함께 사용 가능"></textarea>
         </div>
@@ -368,8 +368,17 @@ function toggleMock(){
 
 function bulkUpload(key,input){
   Array.from(input.files).forEach(file=>{
+    const isPdf=file.type==='application/pdf';
     const r=new FileReader();
-    r.onload=e=>{bulkStore[key].push({base64:e.target.result.split(',')[1],mediaType:file.type||'image/jpeg',name:file.name});renderBulkPreviews(key);};
+    r.onload=e=>{
+      bulkStore[key].push({
+        base64:e.target.result.split(',')[1],
+        mediaType:isPdf?'application/pdf':(file.type||'image/jpeg'),
+        name:file.name,
+        isPdf
+      });
+      renderBulkPreviews(key);
+    };
     r.readAsDataURL(file);
   });
   input.value='';
@@ -382,11 +391,21 @@ function renderBulkPreviews(key){
   const area=document.getElementById(`bulk-preview-${key}`);
   const badge=document.getElementById(`bulk-badge-${key}`);
   area.innerHTML='';
-  if(bulkStore[key].length){badge.style.display='inline';badge.textContent=`📷 ${bulkStore[key].length}`;}
-  else{badge.style.display='none';}
-  bulkStore[key].forEach((img,ii)=>{
+  if(bulkStore[key].length){
+    const pdfCount=bulkStore[key].filter(f=>f.isPdf).length;
+    const imgCount=bulkStore[key].filter(f=>!f.isPdf).length;
+    const parts=[];
+    if(pdfCount>0)parts.push(`📄 PDF ${pdfCount}`);
+    if(imgCount>0)parts.push(`📷 ${imgCount}`);
+    badge.style.display='inline';badge.textContent=parts.join(' · ');
+  } else {badge.style.display='none';}
+  bulkStore[key].forEach((file,ii)=>{
     const w=document.createElement('div');w.className='bulk-img-wrap';
-    w.innerHTML=`<img class="bulk-img" src="data:${img.mediaType};base64,${img.base64}" onclick="openLightbox(this.src)" title="${img.name}"/><button class="bulk-img-remove" onclick="removeBulkImage('${key}',${ii})">×</button><div class="bulk-img-name">${img.name}</div>`;
+    if(file.isPdf){
+      w.innerHTML=`<div class="bulk-img" style="display:flex;flex-direction:column;align-items:center;justify-content:center;background:var(--surface2);cursor:default;font-size:24px;gap:2px">📄<span style="font-size:9px;color:var(--text2);text-align:center;padding:0 4px;word-break:break-all">${file.name.replace(/\.pdf$/i,'')}</span></div><button class="bulk-img-remove" onclick="removeBulkImage('${key}',${ii})">×</button><div class="bulk-img-name">${file.name}</div>`;
+    } else {
+      w.innerHTML=`<img class="bulk-img" src="data:${file.mediaType};base64,${file.base64}" onclick="openLightbox(this.src)" title="${file.name}"/><button class="bulk-img-remove" onclick="removeBulkImage('${key}',${ii})">×</button><div class="bulk-img-name">${file.name}</div>`;
+    }
     area.appendChild(w);
   });
   const add=document.createElement('label');add.className='bulk-add-btn';add.htmlFor=fileId;add.textContent='+';
@@ -524,15 +543,20 @@ O
   const setMsg=(msg)=>{const el=document.getElementById('loadingMsg');if(el)el.textContent=msg;};
 
   // ── OCR 공통 함수 ──
-  const runOCR=async(imgs,existingText,label,prompt)=>{
-    if(existingText) return existingText; // 텍스트 직접 입력된 경우
-    if(!imgs.length) return '';
+  const runOCR=async(files,existingText,label,prompt)=>{
+    if(existingText) return existingText;
+    if(!files.length) return '';
     try{
       const p=[];
       p.push({type:'text',text:prompt});
-      imgs.forEach((img,ii)=>{
-        p.push({type:'text',text:`${label}이미지${ii+1}`});
-        p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+      files.forEach((file,ii)=>{
+        p.push({type:'text',text:`${label}파일${ii+1}: ${file.name}`});
+        if(file.isPdf){
+          // PDF는 document 타입으로 전달
+          p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        } else {
+          p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
+        }
       });
       return await callOCR(p);
     }catch(e){
@@ -560,9 +584,10 @@ ${ocrText}`});
     } else {
       p.push({type:'text',text:`[해설] ${rangeLabel}의 수식·수치·풀이단계를 정확히 읽고 그대로 사용하세요.`});
       if(aT) p.push({type:'text',text:aT});
-      bulkStore.a.forEach((img,ii)=>{
-        p.push({type:'text',text:`해설이미지${ii+1}`});
-        p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+      bulkStore.a.forEach((file,ii)=>{
+        p.push({type:'text',text:`해설파일${ii+1}: ${file.name}`});
+        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
+        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
       });
     }
 
@@ -572,9 +597,10 @@ ${ocrText}`});
     } else {
       p.push({type:'text',text:`[문제] ${rangeLabel}`});
       if(qT) p.push({type:'text',text:qT});
-      bulkStore.q.forEach((img,ii)=>{
-        p.push({type:'text',text:`문제이미지${ii+1}`});
-        p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+      bulkStore.q.forEach((file,ii)=>{
+        p.push({type:'text',text:`문제파일${ii+1}: ${file.name}`});
+        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
+        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
       });
     }
 
@@ -592,9 +618,10 @@ ${ocrSText}`});
     } else {
       p.push({type:'text',text:`[학생풀이] ${rangeLabel}의 학생 풀이입니다. 문제별 식·계산·최종 답을 읽어 피드백에 반영하세요.`});
       if(sT) p.push({type:'text',text:sT});
-      bulkStore.s.forEach((img,ii)=>{
-        p.push({type:'text',text:`학생풀이이미지${ii+1}`});
-        p.push({type:'image',source:{type:'base64',media_type:img.mediaType,data:img.base64}});
+      bulkStore.s.forEach((file,ii)=>{
+        p.push({type:'text',text:`학생풀이파일${ii+1}: ${file.name}`});
+        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
+        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
       });
     }
 
