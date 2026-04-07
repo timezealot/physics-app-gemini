@@ -66,18 +66,20 @@ export default async function handler(req) {
       })
       .filter(p => p.inlineData || (p.text && p.text.trim()));
 
+    const model = 'gemini-2.5-flash-lite';
+
+    // 스트리밍/비스트리밍에 따라 설정 분리
+    // OCR(비스트리밍): temperature 약간 높여서 반복 루프 방지
+    // 분석(스트리밍): temperature 낮게 유지
+    const generationConfig = stream
+      ? { maxOutputTokens: 16000, temperature: 0.2, topP: 0.95, topK: 40 }
+      : { maxOutputTokens: 8000,  temperature: 0.4, topP: 0.95, topK: 40 };
+
     const geminiBody = {
       contents: [{ role: 'user', parts: cleanParts }],
       systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-      generationConfig: {
-        maxOutputTokens: 16000,
-        temperature: 0,
-        topP: 0.95,
-        topK: 40,
-      },
+      generationConfig,
     };
-
-    const model = 'gemini-2.5-flash-lite';
 
     // ── 비스트리밍 모드 (OCR용) ──
     if (!stream) {
