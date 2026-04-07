@@ -514,38 +514,55 @@ O
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({apiKey,stream:false,messages:[{role:'user',content:parts}]})
     });
+    const resText=await res.text();
     if(!res.ok){
-      const errText=await res.text();
       let errMsg='OCR 오류';
-      try{errMsg=JSON.parse(errText).error?.message||errMsg;}catch{errMsg=errText.slice(0,200)||errMsg;}
+      try{errMsg=JSON.parse(resText).error?.message||errMsg;}catch{errMsg=resText.slice(0,200)||errMsg;}
       throw new Error(errMsg);
     }
-    const data=await res.json();
-    return data.content?.map(c=>c.text||'').join('').trim()||'';
+    try{
+      const data=JSON.parse(resText);
+      return data.content?.map(c=>c.text||'').join('').trim()||'';
+    }catch{
+      // JSON 파싱 실패 시 빈 문자열 반환 (OCR 없이 이미지 직접 분석으로 fallback)
+      console.warn('OCR 응답 파싱 실패, 이미지 직접 사용');
+      return '';
+    }
   };
 
-  // 스트리밍 호출
-  const streamCall=async(parts,onChunk)=>{
-    const res=await fetch('/api/proxy',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({apiKey,system:SYSTEM,messages:[{role:'user',content:parts}]})
-    });
-    if(!res.ok){
-      const errText=await res.text();
-      let errMsg='API 오류';
-      try{errMsg=JSON.parse(errText).error?.message||errMsg;}catch{errMsg=errText.slice(0,200)||errMsg;}
-      throw new Error(errMsg);
-    }
-    const reader=res.body.getReader();const decoder=new TextDecoder();let buf='';
-    while(true){
-      const{done,value}=await reader.read();if(done)break;
-      buf+=decoder.decode(value,{stream:true});
-      const lines=buf.split('\n');buf=lines.pop();
-      for(const line of lines){
-        if(!line.startsWith('data: '))continue;
-        const d=line.slice(6).trim();if(d==='[DONE]')continue;
-        try{const j=JSON.parse(d);if(j.type==='content_block_delta'&&j.delta?.text)onChunk(j.delta.text);}catch{}
+  // 스트리밍 호출 (quota 오류 시 최대 2회 재시도)
+  const streamCall=async(parts,onChunk,retries=2)=>{
+    for(let attempt=0;attempt<=retries;attempt++){
+      const res=await fetch('/api/proxy',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({apiKey,system:SYSTEM,messages:[{role:'user',content:parts}]})
+      });
+      if(!res.ok){
+        const errText=await res.text();
+        let errMsg='API 오류';
+        try{errMsg=JSON.parse(errText).error?.message||errMsg;}catch{errMsg=errText.slice(0,200)||errMsg;}
+        // quota(429) 오류면 대기 후 재시도
+        if(res.status===429&&attempt<retries){
+          const match=errMsg.match(/retry in ([\d.]+)s/i);
+          const wait=match?Math.ceil(parseFloat(match[1]))*1000+1000:15000;
+          setMsg(`⏳ quota 초과, ${Math.round(wait/1000)}초 후 재시도... (${attempt+1}/${retries})`);
+          await new Promise(r=>setTimeout(r,wait));
+          continue;
+        }
+        throw new Error(errMsg);
       }
+      const reader=res.body.getReader();const decoder=new TextDecoder();let buf='';
+      while(true){
+        const{done,value}=await reader.read();if(done)break;
+        buf+=decoder.decode(value,{stream:true});
+        const lines=buf.split('\n');buf=lines.pop();
+        for(const line of lines){
+          if(!line.startsWith('data: '))continue;
+          const d=line.slice(6).trim();if(d==='[DONE]')continue;
+          try{const j=JSON.parse(d);if(j.type==='content_block_delta'&&j.delta?.text)onChunk(j.delta.text);}catch{}
+        }
+      }
+      return; // 성공
     }
   };
 
