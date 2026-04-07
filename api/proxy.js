@@ -1,5 +1,29 @@
 export const config = { runtime: 'edge' };
 
+// quota 오류 시 재시도 (최대 3회, 지수 백오프)
+async function fetchWithRetry(url, options, maxRetries = 3) {
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    const res = await fetch(url, options);
+    if (res.ok) return res;
+
+    // quota 초과(429)면 retry-after 또는 기본 대기 후 재시도
+    if (res.status === 429) {
+      if (attempt < maxRetries - 1) {
+        let waitMs = (attempt + 1) * 12000; // 12s, 24s, 36s
+        try {
+          const errJson = await res.clone().json();
+          const msg = errJson?.error?.message || '';
+          const match = msg.match(/retry in ([\d.]+)s/i);
+          if (match) waitMs = Math.ceil(parseFloat(match[1])) * 1000 + 1000;
+        } catch {}
+        await new Promise(r => setTimeout(r, waitMs));
+        continue;
+      }
+    }
+    return res; // 다른 오류는 그대로 반환
+  }
+}
+
 export default async function handler(req) {
   if (req.method === 'OPTIONS') {
     return new Response(null, {
@@ -84,7 +108,7 @@ export default async function handler(req) {
     // ── 비스트리밍 모드 (OCR용) ──
     if (!stream) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const res = await fetch(url, {
+      const res = await fetchWithRetry(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(geminiBody),
@@ -100,7 +124,6 @@ export default async function handler(req) {
       }
       const data = await res.json();
       const text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-      // Anthropic 형식으로 반환
       return new Response(JSON.stringify({
         content: [{ type: 'text', text }]
       }), {
@@ -111,7 +134,7 @@ export default async function handler(req) {
 
     // ── 스트리밍 모드 ──
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
-    const res = await fetch(url, {
+    const res = await fetchWithRetry(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(geminiBody),
