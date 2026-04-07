@@ -514,7 +514,12 @@ O
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({apiKey,stream:false,messages:[{role:'user',content:parts}]})
     });
-    if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'OCR 오류');}
+    if(!res.ok){
+      const errText=await res.text();
+      let errMsg='OCR 오류';
+      try{errMsg=JSON.parse(errText).error?.message||errMsg;}catch{errMsg=errText.slice(0,200)||errMsg;}
+      throw new Error(errMsg);
+    }
     const data=await res.json();
     return data.content?.map(c=>c.text||'').join('').trim()||'';
   };
@@ -525,7 +530,12 @@ O
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({apiKey,system:SYSTEM,messages:[{role:'user',content:parts}]})
     });
-    if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'API 오류');}
+    if(!res.ok){
+      const errText=await res.text();
+      let errMsg='API 오류';
+      try{errMsg=JSON.parse(errText).error?.message||errMsg;}catch{errMsg=errText.slice(0,200)||errMsg;}
+      throw new Error(errMsg);
+    }
     const reader=res.body.getReader();const decoder=new TextDecoder();let buf='';
     while(true){
       const{done,value}=await reader.read();if(done)break;
