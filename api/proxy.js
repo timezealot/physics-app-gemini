@@ -9,18 +9,17 @@ async function fetchWithRetry(url, options, maxRetries = 3) {
     // quota 초과(429)면 retry-after 또는 기본 대기 후 재시도
     if (res.status === 429) {
       if (attempt < maxRetries - 1) {
-        let waitMs = (attempt + 1) * 12000; // 12s, 24s, 36s
+        let waitMs = (attempt + 1) * 12000; // 12s, 24s
         try {
-          const errJson = await res.clone().json();
-          const msg = errJson?.error?.message || '';
-          const match = msg.match(/retry in ([\d.]+)s/i);
+          const errText = await res.text();
+          const match = errText.match(/retry in ([\d.]+)s/i);
           if (match) waitMs = Math.ceil(parseFloat(match[1])) * 1000 + 1000;
         } catch {}
         await new Promise(r => setTimeout(r, waitMs));
         continue;
       }
     }
-    return res; // 다른 오류는 그대로 반환
+    return res;
   }
 }
 
