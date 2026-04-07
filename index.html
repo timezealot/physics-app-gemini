@@ -507,60 +507,61 @@ O
   const setMsg=(msg)=>{const el=document.getElementById('loadingMsg');if(el)el.textContent=msg;};
 
   // 비스트리밍 OCR 호출
-  const callOCR=async(parts)=>{
+  const callOCR=async(parts,attempt=0)=>{
     const res=await fetch('/api/proxy',{
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({apiKey,stream:false,messages:[{role:'user',content:parts}]})
     });
     const resText=await res.text();
     if(!res.ok){
-      let errMsg='OCR 오류';
-      try{errMsg=JSON.parse(resText).error?.message||errMsg;}catch{errMsg=resText.slice(0,200)||errMsg;}
+      let errMsg='OCR 오류', retryAfter=0;
+      try{const j=JSON.parse(resText);errMsg=j.error?.message||errMsg;retryAfter=j.retryAfter||0;}
+      catch{errMsg=resText.slice(0,200)||errMsg;}
+      // 429면 클라이언트에서 대기 후 재시도 (최대 2회)
+      if(res.status===429&&attempt<2&&retryAfter>0){
+        setMsg(`⏳ quota 초과, ${retryAfter}초 후 재시도...`);
+        await new Promise(r=>setTimeout(r,retryAfter*1000));
+        return callOCR(parts,attempt+1);
+      }
       throw new Error(errMsg);
     }
     try{
       const data=JSON.parse(resText);
       return data.content?.map(c=>c.text||'').join('').trim()||'';
     }catch{
-      // JSON 파싱 실패 시 빈 문자열 반환 (OCR 없이 이미지 직접 분석으로 fallback)
       console.warn('OCR 응답 파싱 실패, 이미지 직접 사용');
       return '';
     }
   };
 
-  // 스트리밍 호출 (quota 오류 시 최대 2회 재시도)
-  const streamCall=async(parts,onChunk,retries=2)=>{
-    for(let attempt=0;attempt<=retries;attempt++){
-      const res=await fetch('/api/proxy',{
-        method:'POST',headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({apiKey,system:SYSTEM,messages:[{role:'user',content:parts}]})
-      });
-      if(!res.ok){
-        const errText=await res.text();
-        let errMsg='API 오류';
-        try{errMsg=JSON.parse(errText).error?.message||errMsg;}catch{errMsg=errText.slice(0,200)||errMsg;}
-        // quota(429) 오류면 대기 후 재시도
-        if(res.status===429&&attempt<retries){
-          const match=errMsg.match(/retry in ([\d.]+)s/i);
-          const wait=match?Math.ceil(parseFloat(match[1]))*1000+1000:15000;
-          setMsg(`⏳ quota 초과, ${Math.round(wait/1000)}초 후 재시도... (${attempt+1}/${retries})`);
-          await new Promise(r=>setTimeout(r,wait));
-          continue;
-        }
-        throw new Error(errMsg);
+  // 스트리밍 호출 (quota 오류 시 클라이언트에서 대기 후 최대 2회 재시도)
+  const streamCall=async(parts,onChunk,attempt=0)=>{
+    const res=await fetch('/api/proxy',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({apiKey,system:SYSTEM,messages:[{role:'user',content:parts}]})
+    });
+    if(!res.ok){
+      const errText=await res.text();
+      let errMsg='API 오류', retryAfter=0;
+      try{const j=JSON.parse(errText);errMsg=j.error?.message||errMsg;retryAfter=j.retryAfter||0;}
+      catch{errMsg=errText.slice(0,200)||errMsg;}
+      if(res.status===429&&attempt<2&&retryAfter>0){
+        setMsg(`⏳ quota 초과, ${retryAfter}초 후 재시도...`);
+        await new Promise(r=>setTimeout(r,retryAfter*1000));
+        return streamCall(parts,onChunk,attempt+1);
       }
-      const reader=res.body.getReader();const decoder=new TextDecoder();let buf='';
-      while(true){
-        const{done,value}=await reader.read();if(done)break;
-        buf+=decoder.decode(value,{stream:true});
-        const lines=buf.split('\n');buf=lines.pop();
-        for(const line of lines){
-          if(!line.startsWith('data: '))continue;
-          const d=line.slice(6).trim();if(d==='[DONE]')continue;
-          try{const j=JSON.parse(d);if(j.type==='content_block_delta'&&j.delta?.text)onChunk(j.delta.text);}catch{}
-        }
+      throw new Error(errMsg);
+    }
+    const reader=res.body.getReader();const decoder=new TextDecoder();let buf='';
+    while(true){
+      const{done,value}=await reader.read();if(done)break;
+      buf+=decoder.decode(value,{stream:true});
+      const lines=buf.split('\n');buf=lines.pop();
+      for(const line of lines){
+        if(!line.startsWith('data: '))continue;
+        const d=line.slice(6).trim();if(d==='[DONE]')continue;
+        try{const j=JSON.parse(d);if(j.type==='content_block_delta'&&j.delta?.text)onChunk(j.delta.text);}catch{}
       }
-      return; // 성공
     }
   };
 
