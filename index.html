@@ -266,7 +266,6 @@ function setBulkAnswer(num, val, btn){
   if(d)d.textContent=`선택: ${val}`;
 }
 
-
 const MOCK_RESPONSE=`=====
 문제 5 피드백
 =====
@@ -411,7 +410,6 @@ function renderBulkPreviews(key){
   const add=document.createElement('label');add.className='bulk-add-btn';add.htmlFor=fileId;add.textContent='+';
   area.appendChild(add);
 }
-
 
 function openLightbox(src){document.getElementById('lightboxImg').src=src;document.getElementById('lightbox').classList.add('open');}
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
