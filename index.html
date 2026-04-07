@@ -429,45 +429,34 @@ async function analyze(){
   document.getElementById('analyzeWrap').style.display='none';
   document.getElementById('resultView').classList.add('visible');
   const rc=document.getElementById('resultContent');
-  rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text">${isMock?'🧪 샘플 결과 로딩 중...':'AI가 풀이를 분석하고 있습니다...'}<br><small style="color:var(--text3)">${isMock?'실제 API 호출 없음':'사진이 많으면 조금 더 걸릴 수 있어요'}</small></div></div>`;
+  rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">${isMock?'🧪 샘플 결과 로딩 중...':'AI가 풀이를 분석하고 있습니다...'}<br><small style="color:var(--text3)">${isMock?'실제 API 호출 없음':'사진이 많으면 조금 더 걸릴 수 있어요'}</small></div></div>`;
 
   if(isMock){setTimeout(()=>renderResult(MOCK_RESPONSE,rc),800);return;}
 
   const SYSTEM=`물리1 교사. 학생 풀이 분석·피드백 작성.
 
 【풀이법(▶ 3.) 작성 — 절대 규칙】
-풀이법은 창작·해석·요약이 아닌 "복사"입니다.
-[해설 텍스트]의 해당 문제 풀이 내용을 읽고, 아래 규칙대로 그대로 옮겨 쓰세요:
-- 각 줄을 순서대로 1단계, 2단계, 3단계... 로 번호를 붙여 옮겨 쓸 것
-- 수식·수치·기호·단위를 한 글자도 바꾸지 말 것 (예: ΣM_A = (mg × 1) - (T × 1) = 0)
-- 해설에 없는 설명·단계·개념을 절대 추가하지 말 것
-- 해설 내용을 요약하거나 쉽게 풀어 쓰는 것을 절대 금지
-- 해설이 틀려 보여도 그대로 옮길 것 — AI의 판단은 개입 금지
+[해설 텍스트]와 [해설 원본 이미지]가 모두 제공됩니다:
+- 먼저 [해설 텍스트]에서 해당 문제의 [문제N] 섹션을 찾으세요.
+- 텍스트의 수식이 이미지와 다르면 반드시 이미지를 우선으로 사용하세요.
+- 각 풀이 단계를 "1단계: ...", "2단계: ..." 형식으로 수식·수치·기호를 한 글자도 바꾸지 말고 그대로 옮겨 쓰세요.
+- 분수(4L/13), 계수(3mg), 첨자(T', d1)를 특히 주의해서 확인하세요.
+- 자신의 물리 지식으로 해설을 수정·보완·재해석하는 것을 절대 금지합니다.
+- 해설에 없는 단계·수식·개념 추가 절대 금지.
 
 【피드백(▶ 5.) 작성 규칙】
 피드백은 AI가 작성하되 반드시 아래 기준을 지키세요:
-
-1. 물리학1 교육과정 범위 내 개념만 사용:
-   - 사용 가능: 힘의 평형(ΣF=0), 돌림힘 평형(Στ=0), 뉴턴 운동 법칙(F=ma),
-     작용·반작용, 운동량·충격량, 역학적 에너지 보존, 열역학 기본, 파동, 전기장·자기장 기초
-   - 사용 금지: 물리학2·대학물리 수준 개념 (라그랑지안, 미적분 기반 유도 등)
-
-2. 해설 기준으로만 평가:
-   - 학생 풀이(▶4)와 해설 풀이법(▶3)을 비교해서 어떤 단계에서 차이가 있는지 구체적으로 서술
-   - 해설에 없는 오류를 AI가 독자적으로 판단해서 지적하는 것 금지
-   - 학생이 정답을 맞혔고 해설과 동일한 논리 흐름이면 "해설과 동일한 접근" 으로 인정
-
-3. 구체성:
-   - "식을 잘못 세웠습니다" 같은 막연한 표현 금지
-   - 학생이 실제로 쓴 식과 해설의 식을 대조해서 어느 부분이 다른지 명시
-   - 개선점은 물리학1 개념 용어를 사용해 구체적으로 제시
+1. 물리학1 교육과정 범위 내 개념만 사용 (힘의 평형 ΣF=0, 돌림힘 평형 Στ=0, 뉴턴 운동법칙 F=ma, 운동량·충격량, 역학적 에너지 보존 등)
+2. 해설 기준으로만 평가: 학생 풀이(▶4)와 해설(▶3)을 비교해 어느 단계에서 차이가 있는지 서술. 해설에 없는 오류 창작 금지.
+3. 구체성: 학생이 실제로 쓴 식과 해설의 식을 대조해 어느 부분이 다른지 명시. "식을 잘못 세웠습니다" 같은 막연한 표현 금지.
+4. 정답이고 해설과 동일 흐름이면 "해설과 동일한 접근"으로 인정.
 
 규칙:
 - 정답(▶ 1.): 해설에서 확인한 원문자(①②③④⑤)만.
 - 정오답(▶ 2.): 학생정답↔해설정답 비교, O/X만.
 - 학생풀이정리(▶ 4.): 학생풀이에서 해당 문제 찾아 식·계산·최종답 그대로 정리. 추측금지.
 - 점수(▶ 6.): 해설기준. "평가불가"금지. 형식: X점/10점|이유:한문장
-- 형식(▶ =====)변경금지. LaTeX금지. 인사말금지. ※주석 출력금지.
+- 형식(▶ =====)변경금지. LaTeX금지. 인사말금지.
 - 이미지: m/2m=질량(kg), mg/2mg=중력(N). 질감→질량, 막돼→막대, 마철→마찰.`;
 
   const FMT_PROBLEM=`
@@ -481,7 +470,8 @@ O
 ▶ 3. 문제 풀이법
 1단계: (해설 내용 그대로)
 2단계: (해설 내용 그대로)
-3단계: (해설 내용 그대로)
+3단계: (해설 수식·수치 그대로)
+4단계: (해설의 최종 결론)
 ▶ 4. 학생 풀이 정리
 - 학생이 세운 식: (학생 풀이에서 읽은 식)
 - 학생의 계산 과정: (학생 풀이에서 읽은 계산)
@@ -508,8 +498,6 @@ O
 ▶ 보완할 점
 ▶ 학습 방향`;
 
-  let parts=[], feedbackFormat='';
-
   const qT=document.getElementById('bulk-text-q').value.trim();
   const aT=document.getElementById('bulk-text-a').value.trim();
   const sT=document.getElementById('bulk-text-s').value.trim();
@@ -518,22 +506,20 @@ O
     alert('사진 또는 텍스트를 입력해주세요.');goBack();return;
   }
 
-  // 정답/학생 정답 목록
-  const bulkAnsEntries=Object.entries(bulkStudentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
-  const bulkCorrEntries=Object.entries(bulkCorrectAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+  const setMsg=(msg)=>{const el=document.getElementById('loadingMsg');if(el)el.textContent=msg;};
 
-  // 비스트리밍 호출 (OCR용)
-  const callOCR=async(ocrParts)=>{
+  // 비스트리밍 OCR 호출
+  const callOCR=async(parts)=>{
     const res=await fetch('/api/proxy',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({apiKey,stream:false,messages:[{role:'user',content:ocrParts}]})
+      body:JSON.stringify({apiKey,stream:false,messages:[{role:'user',content:parts}]})
     });
     if(!res.ok){const e=await res.json();throw new Error(e.error?.message||'OCR 오류');}
     const data=await res.json();
     return data.content?.map(c=>c.text||'').join('').trim()||'';
   };
 
-  // 스트리밍 호출 함수
+  // 스트리밍 호출
   const streamCall=async(parts,onChunk)=>{
     const res=await fetch('/api/proxy',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -553,48 +539,40 @@ O
     }
   };
 
-  // UI 준비 (로딩 표시)
-  rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">🔍 해설 텍스트 변환 중...</div></div>`;
-  const setMsg=(msg)=>{const el=document.getElementById('loadingMsg');if(el)el.textContent=msg;};
-
-  // ── OCR 공통 함수 ──
+  // OCR 공통
   const runOCR=async(files,existingText,label,prompt)=>{
-    if(existingText) return existingText;
-    if(!files.length) return '';
+    if(existingText)return existingText;
+    if(!files.length)return'';
     try{
       const p=[];
       p.push({type:'text',text:prompt});
       files.forEach((file,ii)=>{
         p.push({type:'text',text:`${label}파일${ii+1}: ${file.name}`});
-        if(file.isPdf){
-          // PDF는 document 타입으로 전달
-          p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
-        } else {
-          p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
-        }
+        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
+        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
       });
       return await callOCR(p);
-    }catch(e){
-      console.warn(`${label} OCR 실패:`,e.message);
-      return '';
-    }
+    }catch(e){console.warn(`${label} OCR 실패:`,e.message);return'';}
   };
 
-  // parts 생성 함수 (문제 범위 지정)
+  // parts 생성
   const makeParts=(startNum,endNum)=>{
     const p=[];
     const rangeLabel=`${startNum}번~${endNum}번 문제`;
 
-    // 해설
     if(ocrText){
-      p.push({type:'text',text:`[해설 텍스트] ← 풀이법(▶ 3.)의 출처입니다.
-작성법: 해당 문제의 [문제N] 섹션을 찾아 "풀이 단계:" 아래 각 줄을 "1단계: ...", "2단계: ..." 로 그대로 복사하세요.
-요약·해석·추가설명 없이 복사만 하세요. 수식·숫자·기호 한 글자도 바꾸지 마세요.
-
-${ocrText}`});
+      // OCR 텍스트 + 원본 이미지/PDF 함께 전달 → AI가 텍스트 오류 시 이미지 직접 확인 가능
+      p.push({type:'text',text:`[해설 텍스트 — OCR 추출]\n아래 텍스트와 원본 이미지를 함께 참고하세요. 텍스트의 수식이 이미지와 다르면 이미지를 우선으로 사용하세요.\n풀이법(▶3) 작성: 해당 문제의 [문제N] 섹션을 찾아 수식·수치를 한 글자도 바꾸지 말고 그대로 옮겨 쓰세요.\n\n${ocrText}`});
+      // 원본도 함께 전달
+      if(aT)p.push({type:'text',text:aT});
+      bulkStore.a.forEach((file,ii)=>{
+        p.push({type:'text',text:`해설원본${ii+1}: ${file.name}`});
+        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
+        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
+      });
     } else {
-      p.push({type:'text',text:`[해설] ${rangeLabel}의 수식·수치·풀이단계를 정확히 읽고 그대로 사용하세요.`});
-      if(aT) p.push({type:'text',text:aT});
+      p.push({type:'text',text:`[해설] 아래 이미지/텍스트에서 ${rangeLabel}의 풀이를 읽고, 수식·수치를 한 글자도 바꾸지 말고 그대로 단계별로 옮겨 쓰세요.`});
+      if(aT)p.push({type:'text',text:aT});
       bulkStore.a.forEach((file,ii)=>{
         p.push({type:'text',text:`해설파일${ii+1}: ${file.name}`});
         if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
@@ -602,12 +580,11 @@ ${ocrText}`});
       });
     }
 
-    // 문제
     if(ocrQText){
-      p.push({type:'text',text:`[문제 텍스트 — OCR 변환]\n${rangeLabel}의 문제 조건·수치·요구사항을 정확히 파악하세요.\n\n${ocrQText}`});
+      p.push({type:'text',text:`[문제 텍스트]\n${ocrQText}`});
     } else {
       p.push({type:'text',text:`[문제] ${rangeLabel}`});
-      if(qT) p.push({type:'text',text:qT});
+      if(qT)p.push({type:'text',text:qT});
       bulkStore.q.forEach((file,ii)=>{
         p.push({type:'text',text:`문제파일${ii+1}: ${file.name}`});
         if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
@@ -615,17 +592,11 @@ ${ocrText}`});
       });
     }
 
-    // 학생풀이
     if(ocrSText){
-      p.push({type:'text',text:`[학생풀이 텍스트]
-아래 내용을 기반으로 각 문제의 학생 풀이 정리(▶ 4.)를 작성하세요.
-해당 문제의 [문제N] 섹션을 찾아, 학생이 쓴 식·계산·답을 그대로 옮겨 쓰세요. 수정·재계산 금지.
-(풀이 없음)이더라도 이미지에 필기가 있으면 그 내용을 기록하세요.
-
-${ocrSText}`});
+      p.push({type:'text',text:`[학생풀이 텍스트]\n아래에서 각 문제의 학생 풀이를 찾아 그대로 옮겨 쓰세요.\n\n${ocrSText}`});
     } else {
-      p.push({type:'text',text:`[학생풀이] ${rangeLabel}의 학생 풀이입니다. 문제별 식·계산·최종 답을 읽어 피드백에 반영하세요.`});
-      if(sT) p.push({type:'text',text:sT});
+      p.push({type:'text',text:`[학생풀이] ${rangeLabel}`});
+      if(sT)p.push({type:'text',text:sT});
       bulkStore.s.forEach((file,ii)=>{
         p.push({type:'text',text:`학생풀이파일${ii+1}: ${file.name}`});
         if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
@@ -633,93 +604,74 @@ ${ocrSText}`});
       });
     }
 
-    // 해당 범위 정답/학생 정답
+    const bulkAnsEntries=Object.entries(bulkStudentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
+    const bulkCorrEntries=Object.entries(bulkCorrectAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
     const corrSlice=bulkCorrEntries.filter(([n])=>parseInt(n)>=startNum&&parseInt(n)<=endNum);
     const ansSlice=bulkAnsEntries.filter(([n])=>parseInt(n)>=startNum&&parseInt(n)<=endNum);
-    const corrText=corrSlice.length>0?'\n[정답 목록]\n'+corrSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'';
-    const ansText=ansSlice.length>0?'\n[학생 선택 정답]\n'+ansSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'\n[학생 선택 정답: 이미지에서 찾아 판단]';
+    const corrText=corrSlice.length>0?'\n[정답]\n'+corrSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'';
+    const ansText=ansSlice.length>0?'\n[학생선택]\n'+ansSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'\n[학생선택: 이미지에서 판단]';
 
-    const fmt=`${rangeLabel} 분석.${range?` 범위힌트:${range}`:''}${corrText}${ansText}
-${corrSlice.length>0?'정답목록 우선 사용.':''}
-각 문제 해설의 실제 수식을 그대로 사용. 문제마다 다른 풀이법 작성. 동일한 풀이 금지.
-=====로 시작. 앞 설명 금지. 평가불가 금지.
-반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}`;
+    const fmt=`${rangeLabel} 분석.${range?' 범위:'+range:''}${corrText}${ansText}
+=====로 시작. 앞 설명 금지. 평가불가 금지.${corrText?' 정답목록 우선.':''}
+반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
+완료후:${FMT_TOTAL}`;
     p.push({type:'text',text:fmt});
     return p;
   };
 
-  // 세 OCR을 병렬 실행
+  // OCR 병렬 실행
   setMsg('🔍 이미지 텍스트 변환 중...');
-  const [ocrText, ocrQText, ocrSText] = await Promise.all([
-    // 해설 OCR
-    runOCR(bulkStore.a, aT, '해설', `물리1 해설지입니다. 이미지/PDF에 있는 각 문제의 정답과 풀이를 아래 형식으로 추출하세요.
+  const [ocrText,ocrQText,ocrSText]=await Promise.all([
+    runOCR(bulkStore.a,aT,'해설',`물리1 해설지입니다. 각 문제의 정답과 풀이 과정을 아래 형식으로 정확히 추출하세요.
 
 출력 형식:
 [문제1]
 정답: ①
 풀이 단계:
-1. ΣF = 0 적용
-2. T = mg
-3. ...
+1. (해설 첫째 줄 그대로)
+2. (해설 둘째 줄 그대로, 예: ΣM_A = (mg × 2L) - (T × L) = 0)
+3. (해설 셋째 줄 그대로, 예: T = 2mg)
+4. (결론)
 
 [문제2]
 정답: ③
 풀이 단계:
 1. ...
 
-규칙:
-- 각 문제를 [문제N] 형식으로 구분
-- 수식·숫자·기호를 이미지에 있는 그대로 옮길 것 (분수, 계수, 첨자 포함)
+수식 읽기 주의사항 (가장 중요):
+- 분수: 분자와 분모를 정확히 구분 (예: 4L/13 ≠ 13L/4, 29mg/13 ≠ 13/29mg)
+- 계수: mg 앞 숫자 정확히 (예: 2mg ≠ mg, 3mg ≠ 2mg)
+- 첨자: T'과 T'', d1과 d2, M_A와 M_B 각각 구분
+- 괄호: (mg × 3L)에서 × 앞뒤 값 정확히
 - 정답 원문자(①②③④⑤) 반드시 포함
+- 각 문제를 [문제N] 형식으로 구분
 - 해설에 없는 내용 추가 금지
-- 읽기 어려운 부분만 (불명확) 표시
-- 이미 추출한 문제를 다시 반복하지 말 것`),
+- 각 문제 한 번만 출력 (반복 금지)`),
+    runOCR(bulkStore.q,qT,'문제',`물리1 문제지입니다. 각 문제를 아래 형식으로 변환하세요.
 
-    // 문제 OCR
-    runOCR(bulkStore.q, qT, '문제', `물리1 문제지 이미지입니다. 각 문제를 아래 형식으로 변환하세요.
-
-출력 형식:
 [문제1]
-문제 내용: (문제 상황·조건 그대로)
-주어진 값: (수치·단위 그대로)
-구하는 것: (문제가 묻는 것)
+문제 내용: (조건 그대로)
 보기: ① ... ② ... ③ ... ④ ... ⑤ ...
 
 [문제2]
 ...
 
-규칙: 문제 조건·수치·단위 한 글자도 바꾸지 말 것. 그림은 (그림: 간단 설명)으로 표시. 보기 선지 반드시 포함.`),
+규칙: 조건·수치·단위 그대로. 보기 선지 포함.`),
+    runOCR(bulkStore.s,sT,'학생풀이',`학생 손글씨 풀이지입니다. 이미지 전체를 위에서 아래로 스캔해 모든 풀이를 추출하세요.
 
-    // 학생풀이 OCR
-    runOCR(bulkStore.s, sT, '학생풀이', `학생이 손으로 작성한 물리1 풀이지입니다.
-이미지에서 학생의 모든 필기를 위에서 아래, 왼쪽에서 오른쪽 순서로 빠짐없이 읽어서 아래 형식으로 변환하세요.
-
-출력 형식:
 [문제1]
-- 세운 식: (학생이 쓴 식 그대로)
-- 계산 과정: (학생의 계산 그대로)
-- 최종 답: (학생이 쓴 최종 답)
+- 세운 식: (학생 식 그대로)
+- 계산 과정: (학생 계산 그대로)
+- 최종 답: (학생 답)
 
 [문제2]
-- 세운 식: (학생이 쓴 식 그대로)
-- 계산 과정: (학생의 계산 그대로)
-- 최종 답: (학생이 쓴 최종 답)
+...
 
-(이미지에 있는 모든 문제 계속)
-
-규칙:
-- 이미지 전체를 빠짐없이 스캔해서 모든 문제의 풀이를 추출할 것
-- 문제 번호는 이미지에서 읽거나 순서대로 1,2,3... 으로 매길 것
-- 흘려쓴 글씨, 작은 글씨도 최대한 해독할 것
-- 풀이가 아무것도 없는 문제만 (풀이 없음) 표시
-- 읽기 어려운 부분은 (불명확)으로 표시하되 읽을 수 있는 부분은 반드시 기록
-- 학생이 쓴 틀린 식·계산도 그대로 기록, 수정 금지`),
+규칙: 이미지 전체 빠짐없이 스캔. 문제번호는 이미지에서 읽거나 순서대로 1,2,3 매기기. 흘려쓴 글씨도 해독. 진짜 없을 때만 (풀이 없음). 읽기 어려우면 (불명확). 수정 금지.`),
   ]);
 
-
-
   try{
-    // 1차 호출: 1~4번
+    // 1~4번
     setMsg('⚡ 1~4번 분석 중...');
     rc.innerHTML='';
     let fullText='';
@@ -727,30 +679,23 @@ ${corrSlice.length>0?'정답목록 우선 사용.':''}
     sc.innerHTML=`<div style="padding:16px 18px"><div class="stream-text" id="streamText"></div></div>`;
     rc.appendChild(sc);
     const streamEl=document.getElementById('streamText');
-    await streamCall(makeParts(1,4),(chunk)=>{
-      fullText+=chunk;
-      streamEl.textContent=fullText;
-    });
+    await streamCall(makeParts(1,4),(chunk)=>{fullText+=chunk;streamEl.textContent=fullText;});
 
-    // 2차 호출: 5~8번
+    // 5~8번
     setMsg('⚡ 5~8번 분석 중...');
     let fullText2='';
     const sc2=document.createElement('div');sc2.className='prob-card';
     sc2.innerHTML=`<div style="padding:16px 18px"><div class="stream-text" id="streamText2"></div></div>`;
     rc.appendChild(sc2);
     const streamEl2=document.getElementById('streamText2');
-    await streamCall(makeParts(5,8),(chunk)=>{
-      fullText2+=chunk;
-      streamEl2.textContent=fullText2;
-    });
+    await streamCall(makeParts(5,8),(chunk)=>{fullText2+=chunk;streamEl2.textContent=fullText2;});
 
-    // 총평 호출
+    // 총평
     setMsg('⚡ 총평 작성 중...');
-    const totalParts=[{type:'text',text:`아래는 8개 문제 피드백 결과입니다. 이를 바탕으로 총평만 작성하세요.\n\n[1~4번 결과]\n${fullText}\n\n[5~8번 결과]\n${fullText2}\n\n총평 형식:${FMT_TOTAL}\n총평만 출력. 앞 설명 금지.`}];
+    const totalParts=[{type:'text',text:`아래는 8개 문제 피드백 결과입니다. 총평만 작성하세요.\n\n[1~4번]\n${fullText}\n\n[5~8번]\n${fullText2}\n\n형식:${FMT_TOTAL}\n총평만 출력. 앞 설명 금지.`}];
     let totalText='';
     await streamCall(totalParts,(chunk)=>{totalText+=chunk;});
 
-    // 전체 합쳐서 렌더링
     rc.innerHTML='';
     renderResult(fullText+'\n'+fullText2+'\n'+totalText,rc);
 
@@ -758,7 +703,6 @@ ${corrSlice.length>0?'정답목록 우선 사용.':''}
     rc.innerHTML=`<div class="error-box">⚠️ 오류: ${e.message}<br><small>Google AI Studio에서 발급한 API Key(AIza...)를 확인해주세요.</small></div><button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
   }
 }
-
 let lastRawText='';
 
 // 물리1 OCR 오인식 교정
