@@ -45,6 +45,15 @@ export default async function handler(req) {
             }
           });
           allParts.push({ text: '', _afterImage: true });
+        } else if (part.type === 'document') {
+          // PDF document — Gemini natively supports PDF
+          allParts.push({
+            inlineData: {
+              mimeType: 'application/pdf',
+              data: part.source.data,
+            }
+          });
+          allParts.push({ text: '', _afterImage: true });
         }
       }
     }
