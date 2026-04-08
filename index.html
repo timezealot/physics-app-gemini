@@ -190,8 +190,9 @@ const FILE_LIMITS={
   jpegQuality:.95
 };
 const MODEL_CONFIG={
-  extract:'gemini-2.5-flash',
-  analysis:'gemini-2.5-flash-lite'
+  extract:'gemini-2.5-flash-lite',
+  analysis:'gemini-2.5-flash-lite',
+  analysisFallback:'gemini-3-flash-preview'
 };
 
 function getAllStoredFiles(){return [...bulkStore.q,...bulkStore.a,...bulkStore.s];}
@@ -384,6 +385,26 @@ function missingProblemNumbers(found,target){
 }
 function buildCoverageWarning(missing,label){
   return `${label} 누락: ${missing.map(n=>`${n}번`).join(', ')}`;
+}
+
+function deriveExpectedTargets(explicitTargets, solutionMap, ocrText=''){
+  if(Array.isArray(explicitTargets) && explicitTargets.length) return [...explicitTargets];
+  const solutionTargets=Object.keys(solutionMap||{}).map(n=>parseInt(n,10)).filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
+  if(solutionTargets.length) return solutionTargets;
+  const ocrTargets=parseProblemNumbersFromAnyText(ocrText);
+  if(ocrTargets.length) return ocrTargets;
+  return [];
+}
+function hasStructuredProblemBlocks(text){
+  return /=====\s*\n\s*문제\s*\d+\s*피드백\s*\n\s*=====/.test(String(text||''));
+}
+function buildFormatRepairParts(rawText, extractedRaw, expectedTargets){
+  return [
+    {type:'text',text:`아래 원고를 지정된 출력 형식으로만 다시 정리하세요. 내용 추가/삭제 없이 형식만 복구합니다.`},
+    {type:'text',text:`[필수 문제 번호]\n${expectedTargets.map(n=>`${n}번`).join(', ')||'없음'}`},
+    {type:'text',text:`[해설 원문 기준]\n${extractedRaw}`},
+    {type:'text',text:`[재정렬할 원고]\n${rawText}`}
+  ];
 }
 function parseProblemNumbersFromAnyText(text){
   const found=new Set();
@@ -1080,7 +1101,7 @@ O
   };
 
   try{
-    const targets=getTargetProblemNumbers();
+    const explicitTargets=getTargetProblemNumbers();
 
     setMsg('1/3 해설 자료를 OCR 전사 중입니다...');
     let explanationOcrText=aT||'';
@@ -1091,29 +1112,25 @@ O
     setMsg('2/3 해설 원문을 구조화 중입니다...');
     let extractedRaw=await callText(EXTRACT_SYSTEM,buildExplanationExtractParts(explanationOcrText,[],false),{model:MODEL_CONFIG.extract});
     let solutionMap=parseExtractedSolutions(extractedRaw);
+    let expectedTargets=deriveExpectedTargets(explicitTargets,solutionMap,explanationOcrText);
 
-    if(targets.length){
-      const missing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),targets);
+    if(expectedTargets.length){
+      const missing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),expectedTargets);
       if(missing.length){
         setMsg(`2/3 해설 원문 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'해설 추출')}</small>`);
         const retryRaw=await callText(EXTRACT_RETRY_SYSTEM,buildExplanationExtractParts(explanationOcrText,missing,true),{model:MODEL_CONFIG.extract});
         const retryMap=parseExtractedSolutions(retryRaw);
         solutionMap={...solutionMap,...retryMap};
         extractedRaw=Object.entries(solutionMap).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([num,data])=>`[문제번호] ${num}\n정답: ${data.answer||'(불명확)'}\n풀이원문:\n${(data.solution||'(불명확)').trim()}\n[/문제번호]`).join('\n\n');
+        expectedTargets=deriveExpectedTargets(explicitTargets,solutionMap,explanationOcrText);
       }
     }
 
     if(!Object.keys(solutionMap).length)throw new Error('해설 원문 추출에 실패했습니다. 해설 이미지/PDF의 해상도나 배치를 확인해주세요.');
-    if(targets.length){
-      const stillMissing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),targets);
-      if(stillMissing.length){
-        const ocrDetected=parseProblemNumbersFromAnyText(explanationOcrText);
-        if(ocrDetected.length && !Object.keys(bulkCorrectAnswers).length && !Object.keys(bulkStudentAnswers).length){
-          const relaxedMissing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),ocrDetected);
-          if(relaxedMissing.length)throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(relaxedMissing,'해설 추출')}`);
-        }else{
-          throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(stillMissing,'해설 추출')}`);
-        }
+    if(expectedTargets.length){
+      const stillMissing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),expectedTargets);
+      if(stillMissing.length && explicitTargets.length){
+        throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(stillMissing,'해설 추출')}`);
       }
     }
 
@@ -1123,39 +1140,48 @@ O
       studentOcrText=await callPlainOcr(OCR_STUDENT_SYSTEM,buildStudentOcrParts(),{model:MODEL_CONFIG.extract});
     }
 
-    rc.innerHTML='';
-    let fullText='';
-    const sc=document.createElement('div');
-    sc.className='prob-card';
-    sc.innerHTML=`<div style="padding:16px 18px"><div class="stream-text" id="streamText"></div></div>`;
-    rc.appendChild(sc);
-    const streamEl=document.getElementById('streamText');
+    rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">3/3 분석 결과를 생성 중입니다...<br><small style="color:var(--text3)">스트리밍 대신 안정형 응답으로 생성합니다.</small></div></div>`;
 
-    const runAnalysisOnce=async(system)=>{
-      fullText='';
-      streamEl.textContent='';
-      await streamCall(system,buildAnalysisParts(extractedRaw,studentOcrText),chunk=>{fullText+=chunk;streamEl.textContent=fullText;},{model:MODEL_CONFIG.analysis});
-      return fullText;
+    const runAnalysisOnce=async(system,model=MODEL_CONFIG.analysis)=>{
+      return await callText(system,buildAnalysisParts(extractedRaw,studentOcrText),{model});
     };
 
-    let analysisText=await runAnalysisOnce(ANALYSIS_SYSTEM);
+    let analysisText=await runAnalysisOnce(ANALYSIS_SYSTEM,MODEL_CONFIG.analysis);
+    if((!analysisText.trim() || !hasStructuredProblemBlocks(analysisText)) && MODEL_CONFIG.analysisFallback){
+      analysisText=await runAnalysisOnce(`${ANALYSIS_SYSTEM}
+
+반드시 각 문제를 '=====
+문제N 피드백
+=====' 형식으로 출력하세요.`,MODEL_CONFIG.analysisFallback);
+    }
     if(!analysisText.trim())throw new Error('분석 결과가 없습니다. 업로드 파일 또는 API 응답을 확인해주세요.');
 
-    if(targets.length){
+    if(expectedTargets.length){
       const found=extractProblemNumbersFromResult(analysisText);
-      const missing=missingProblemNumbers(found,targets);
+      const missing=missingProblemNumbers(found,expectedTargets);
       if(missing.length){
         setMsg(`3/3 분석 결과 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'분석 결과')}</small>`);
-        analysisText=await runAnalysisOnce(`${ANALYSIS_SYSTEM}\n\n${ANALYSIS_RETRY_SYSTEM}`);
+        const repaired=await callText(`${ANALYSIS_SYSTEM}
+
+${ANALYSIS_RETRY_SYSTEM}`,buildAnalysisParts(extractedRaw,studentOcrText),{model:MODEL_CONFIG.analysisFallback||MODEL_CONFIG.analysis});
+        analysisText=(repaired&&repaired.trim())?repaired:analysisText;
+      }
+    }
+
+    if(expectedTargets.length){
+      const finalFound=extractProblemNumbersFromResult(analysisText);
+      const finalMissing=missingProblemNumbers(finalFound,expectedTargets);
+      if(finalMissing.length && !hasStructuredProblemBlocks(analysisText)){
+        analysisText=await callText(`형식 복구 전용 편집기. 문제 번호와 제목을 정확히 복원하세요.`,buildFormatRepairParts(analysisText,extractedRaw,expectedTargets),{model:MODEL_CONFIG.analysisFallback||MODEL_CONFIG.analysis});
       }
     }
 
     rc.innerHTML='';
     if(!analysisText.trim())throw new Error('분석 결과가 없습니다. 업로드 파일 또는 API 응답을 확인해주세요.');
-    if(targets.length){
+    if(expectedTargets.length){
       const finalFound=extractProblemNumbersFromResult(analysisText);
-      const finalMissing=missingProblemNumbers(finalFound,targets);
-      if(finalMissing.length)throw new Error(`분석 결과가 불완전합니다. ${buildCoverageWarning(finalMissing,'분석 결과')}`);
+      const finalMissing=missingProblemNumbers(finalFound,expectedTargets);
+      if(finalMissing.length && explicitTargets.length)throw new Error(`분석 결과가 불완전합니다. ${buildCoverageWarning(finalMissing,'분석 결과')}`);
     }
 
     const mergedText=mergeExtractedSolutions(analysisText,solutionMap);
