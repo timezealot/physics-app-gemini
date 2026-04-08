@@ -190,8 +190,8 @@ const FILE_LIMITS={
   jpegQuality:.95
 };
 const MODEL_CONFIG={
-  extract:'gemini-2.5-flash',
-  analysis:'gemini-2.5-flash-lite'
+  extract:['gemini-2.5-flash','gemini-2.0-flash'],
+  analysis:['gemini-2.5-flash-lite','gemini-2.0-flash']
 };
 
 function getAllStoredFiles(){return [...bulkStore.q,...bulkStore.a,...bulkStore.s];}
@@ -814,36 +814,51 @@ O
 
   const parseProxyError=(raw,fallback='API 오류')=>{
     let errMsg=fallback;
-    let retryAfter=65;
+    let retryAfter=20;
+    let meta={};
     try{
       const j=JSON.parse(raw);
       errMsg=j.error?.message||fallback;
       if(j.retryAfter)retryAfter=j.retryAfter;
+      meta=j.meta||{};
     }catch{
       const m=String(raw||'').match(/retry in ([\d.]+)s/i);
       if(m)retryAfter=Math.ceil(parseFloat(m[1]))+2;
       errMsg=String(raw||fallback).slice(0,300);
     }
-    return {errMsg,retryAfter};
+    return {errMsg,retryAfter,meta};
+  };
+
+  const isTransientModelBusy=(status,msg='')=>{
+    const t=String(msg||'').toLowerCase();
+    return [429,500,502,503,504].includes(status)||t.includes('high demand')||t.includes('temporarily unavailable')||t.includes('resource exhausted')||t.includes('overloaded')||t.includes('try again later');
+  };
+
+  const normalizeModelList=(modelOrList,fallbackList=[])=>{
+    const arr=[].concat(modelOrList||[]).concat(fallbackList||[]).filter(Boolean);
+    return [...new Set(arr)];
   };
 
   const callText=async(system,parts,{attempt=0,model=MODEL_CONFIG.extract}={})=>{
+    const models=normalizeModelList(model);
+    const primaryModel=models[0];
+    const fallbackModels=models.slice(1);
     let res;
     try{
       res=await fetchWithTimeout('/api/proxy',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({apiKey,stream:false,system,model,messages:[{role:'user',content:parts}]})
+        body:JSON.stringify({apiKey,stream:false,system,model:primaryModel,fallbackModels,messages:[{role:'user',content:parts}]})
       },240000);
     }catch(e){throw new Error(e.message);}
 
     const raw=await res.text();
     if(!res.ok){
       const {errMsg,retryAfter}=parseProxyError(raw);
-      if(res.status===429 && attempt<1){
-        setMsg(`⏳ quota 초과로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 1회만 재시도합니다.</small>`);
-        await new Promise(r=>setTimeout(r,retryAfter*1000));
-        return callText(system,parts,{attempt:attempt+1,model});
+      if(isTransientModelBusy(res.status,errMsg)&&attempt<1){
+        setMsg(`⏳ 모델 혼잡으로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 대체 모델 포함 1회만 재시도합니다.</small>`);
+        await new Promise(r=>setTimeout(r,Math.min(retryAfter,20)*1000));
+        return callText(system,parts,{attempt:attempt+1,model:models});
       }
       throw new Error(errMsg);
     }
@@ -856,22 +871,25 @@ O
   };
 
   const streamCall=async(system,parts,onChunk,{attempt=0,model=MODEL_CONFIG.analysis}={})=>{
+    const models=normalizeModelList(model);
+    const primaryModel=models[0];
+    const fallbackModels=models.slice(1);
     let res;
     try{
       res=await fetchWithTimeout('/api/proxy',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({apiKey,system,model,messages:[{role:'user',content:parts}]})
+        body:JSON.stringify({apiKey,system,model:primaryModel,fallbackModels,messages:[{role:'user',content:parts}]})
       },240000);
     }catch(e){throw new Error(e.message);}
 
     if(!res.ok){
       const errText=await res.text();
       const {errMsg,retryAfter}=parseProxyError(errText);
-      if(res.status===429 && attempt<1){
-        setMsg(`⏳ quota 초과로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 1회만 재시도합니다.</small>`);
-        await new Promise(r=>setTimeout(r,retryAfter*1000));
-        return streamCall(system,parts,onChunk,{attempt:attempt+1,model});
+      if(isTransientModelBusy(res.status,errMsg)&&attempt<1){
+        setMsg(`⏳ 모델 혼잡으로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 대체 모델 포함 1회만 재시도합니다.</small>`);
+        await new Promise(r=>setTimeout(r,Math.min(retryAfter,20)*1000));
+        return streamCall(system,parts,onChunk,{attempt:attempt+1,model:models});
       }
       throw new Error(errMsg);
     }
