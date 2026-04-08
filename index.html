@@ -190,8 +190,8 @@ const FILE_LIMITS={
   jpegQuality:.95
 };
 const MODEL_CONFIG={
-  extract:['gemini-2.5-flash','gemini-2.0-flash'],
-  analysis:['gemini-2.5-flash-lite','gemini-2.0-flash']
+  extract:['gemini-2.5-flash','gemini-3-flash-preview','gemini-2.5-flash-lite','gemini-3.1-flash-lite-preview'],
+  analysis:['gemini-2.5-flash-lite','gemini-2.5-flash','gemini-3.1-flash-lite-preview','gemini-3-flash-preview']
 };
 
 function getAllStoredFiles(){return [...bulkStore.q,...bulkStore.a,...bulkStore.s];}
@@ -857,7 +857,7 @@ O
       const {errMsg,retryAfter}=parseProxyError(raw);
       if(isTransientModelBusy(res.status,errMsg)&&attempt<1){
         setMsg(`⏳ 모델 혼잡으로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 대체 모델 포함 1회만 재시도합니다.</small>`);
-        await new Promise(r=>setTimeout(r,Math.min(retryAfter,20)*1000));
+        await new Promise(r=>setTimeout(r,Math.min(retryAfter,12 + attempt*8)*1000));
         return callText(system,parts,{attempt:attempt+1,model:models});
       }
       throw new Error(errMsg);
@@ -888,7 +888,7 @@ O
       const {errMsg,retryAfter}=parseProxyError(errText);
       if(isTransientModelBusy(res.status,errMsg)&&attempt<1){
         setMsg(`⏳ 모델 혼잡으로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 대체 모델 포함 1회만 재시도합니다.</small>`);
-        await new Promise(r=>setTimeout(r,Math.min(retryAfter,20)*1000));
+        await new Promise(r=>setTimeout(r,Math.min(retryAfter,12 + attempt*8)*1000));
         return streamCall(system,parts,onChunk,{attempt:attempt+1,model:models});
       }
       throw new Error(errMsg);
