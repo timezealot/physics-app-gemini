@@ -1,123 +1,393 @@
-// Vercel Node.js Function
-export const config = { maxDuration: 300 };
+// /api/proxy.js - hardened Vercel Node.js Function
+export const config = {
+  runtime: 'nodejs',
+  maxDuration: 300,
+};
 
-export default async function handler(req, res) {
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
+const ALLOWED_MODELS = new Set([
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
+  'gemini-2.5-pro',
+  'gemini-2.0-flash',
+]);
 
-  if (req.method === 'OPTIONS') return res.status(200).end();
+const CORS_HEADERS = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Methods': 'POST, OPTIONS',
+  'Access-Control-Allow-Headers': 'Content-Type, X-Requested-With',
+};
 
+const STREAM_HEADERS = {
+  ...CORS_HEADERS,
+  'Content-Type': 'text/event-stream; charset=utf-8',
+  'Cache-Control': 'no-cache, no-transform',
+  Connection: 'keep-alive',
+  'X-Accel-Buffering': 'no',
+};
+
+const MAX_CONTENT_LENGTH = 24 * 1024 * 1024;
+const MAX_INLINE_BYTES = 18 * 1024 * 1024;
+const NON_STREAM_TIMEOUT = 120_000;
+const STREAM_TIMEOUT = 240_000;
+
+function setHeaders(res, headers) {
+  for (const [k, v] of Object.entries(headers)) res.setHeader(k, v);
+}
+
+function setCors(res) {
+  setHeaders(res, CORS_HEADERS);
+}
+
+function sendJson(res, status, payload) {
+  if (res.headersSent) return;
+  setCors(res);
+  res.status(status).json(payload);
+}
+
+function safeJsonParse(value, fallback = null) {
   try {
-    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
-    const { apiKey, system, messages, stream = true } = body;
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
 
-    if (!apiKey) return res.status(400).json({ error: { message: 'API Key가 없습니다.' } });
+function normalizeRetryAfter(rawText = '', fallback = 60) {
+  const retryAfterHeader = String(rawText).match(/retry[- ]after\s*[:=]?\s*([\d.]+)s?/i);
+  if (retryAfterHeader) return Math.max(1, Math.ceil(Number(retryAfterHeader[1])));
+  const retryIn = String(rawText).match(/retry in ([\d.]+)s/i);
+  if (retryIn) return Math.max(1, Math.ceil(Number(retryIn[1])) + 1);
+  return fallback;
+}
 
-    // Anthropic parts → Gemini parts 변환
-    const allParts = [];
-    for (const msg of messages) {
-      const content = Array.isArray(msg.content) ? msg.content : [{ type: 'text', text: msg.content }];
-      for (const part of content) {
-        if (part.type === 'text') {
-          const prev = allParts[allParts.length - 1];
-          if (prev && prev.text !== undefined && !prev._afterImage) {
-            prev.text += '\n' + part.text;
-          } else {
-            allParts.push({ text: part.text, _afterImage: false });
-          }
-        } else if (part.type === 'image') {
-          allParts.push({ inlineData: { mimeType: part.source.media_type, data: part.source.data } });
-          allParts.push({ text: '', _afterImage: true });
-        } else if (part.type === 'document') {
-          allParts.push({ inlineData: { mimeType: 'application/pdf', data: part.source.data } });
-          allParts.push({ text: '', _afterImage: true });
+function extractGeminiText(data) {
+  const candidates = Array.isArray(data?.candidates) ? data.candidates : [];
+  let text = '';
+  for (const candidate of candidates) {
+    const parts = candidate?.content?.parts;
+    if (!Array.isArray(parts)) continue;
+    for (const part of parts) {
+      if (typeof part?.text === 'string') text += part.text;
+    }
+  }
+  return text;
+}
+
+function extractPromptFeedbackMessage(data) {
+  const feedback = data?.promptFeedback;
+  if (!feedback) return '';
+  const blockReason = feedback?.blockReason;
+  if (blockReason) return `요청이 차단되었습니다: ${blockReason}`;
+  return '';
+}
+
+function sanitizeMessageContent(content) {
+  if (Array.isArray(content)) return content;
+  if (typeof content === 'string' && content.trim()) return [{ type: 'text', text: content }];
+  return [];
+}
+
+function convertAnthropicPartsToGemini(messages = []) {
+  const allParts = [];
+
+  for (const msg of messages) {
+    const content = sanitizeMessageContent(msg?.content);
+    for (const part of content) {
+      if (part?.type === 'text') {
+        const text = String(part.text ?? '');
+        if (!text.trim()) continue;
+        const prev = allParts[allParts.length - 1];
+        if (prev && typeof prev.text === 'string' && !prev._afterBinary) {
+          prev.text += `\n${text}`;
+        } else {
+          allParts.push({ text, _afterBinary: false });
         }
+        continue;
+      }
+
+      if (part?.type === 'image') {
+        const mimeType = part?.source?.media_type;
+        const data = part?.source?.data;
+        if (!mimeType || !data) continue;
+        allParts.push({ inlineData: { mimeType, data } });
+        allParts.push({ text: '', _afterBinary: true });
+        continue;
+      }
+
+      if (part?.type === 'document') {
+        const mimeType = part?.source?.media_type || 'application/pdf';
+        const data = part?.source?.data;
+        if (!data) continue;
+        allParts.push({ inlineData: { mimeType, data } });
+        allParts.push({ text: '', _afterBinary: true });
       }
     }
+  }
 
-    const cleanParts = allParts
-      .map(p => { if (p.inlineData) return p; const { _afterImage, ...rest } = p; return rest; })
-      .filter(p => p.inlineData || (p.text && p.text.trim()));
+  return allParts
+    .map((part) => {
+      if (part.inlineData) return part;
+      const { _afterBinary, ...rest } = part;
+      return rest;
+    })
+    .filter((part) => part.inlineData || (typeof part.text === 'string' && part.text.trim()));
+}
 
-    const model = 'gemini-2.5-flash-lite';
-    const generationConfig = stream
-      ? { maxOutputTokens: 16000, temperature: 0.2, topP: 0.95, topK: 40 }
-      : { maxOutputTokens: 8000,  temperature: 0.4, topP: 0.95, topK: 40 };
+function estimateInlineDataBytes(parts) {
+  let total = 0;
+  for (const part of parts) {
+    const data = part?.inlineData?.data;
+    if (typeof data === 'string') total += Math.floor((data.length * 3) / 4);
+  }
+  return total;
+}
 
-    const geminiBody = {
-      contents: [{ role: 'user', parts: cleanParts }],
-      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
-      generationConfig,
-    };
+function commonPrefixLength(a = '', b = '') {
+  const len = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < len && a[i] === b[i]) i += 1;
+  return i;
+}
 
-    // ── 비스트리밍 (OCR용) ──
+async function fetchWithTimeout(url, options, timeoutMs) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function buildGeminiBody({ system, parts, stream, temperature }) {
+  const generationConfig = stream
+    ? {
+        maxOutputTokens: 12000,
+        temperature: temperature ?? 0.15,
+        topP: 0.95,
+        topK: 32,
+      }
+    : {
+        maxOutputTokens: 7000,
+        temperature: temperature ?? 0.1,
+        topP: 0.9,
+        topK: 24,
+      };
+
+  return {
+    contents: [{ role: 'user', parts }],
+    ...(system ? { systemInstruction: { parts: [{ text: String(system) }] } } : {}),
+    generationConfig,
+  };
+}
+
+function buildErrorPayload(status, rawText) {
+  const parsed = safeJsonParse(rawText, {});
+  const message =
+    parsed?.error?.message ||
+    parsed?.message ||
+    rawText?.slice?.(0, 500) ||
+    'Gemini API 오류';
+
+  const retryAfter = status === 429 ? normalizeRetryAfter(rawText, 60) : undefined;
+
+  return {
+    error: {
+      message,
+      status,
+      code: parsed?.error?.code,
+    },
+    ...(retryAfter ? { retryAfter } : {}),
+  };
+}
+
+function writeSse(res, payload) {
+  res.write(`data: ${JSON.stringify(payload)}\n\n`);
+}
+
+export default async function handler(req, res) {
+  setCors(res);
+
+  if (req.method === 'OPTIONS') return res.status(200).end();
+  if (req.method !== 'POST') {
+    return sendJson(res, 405, { error: { message: 'POST 요청만 허용됩니다.' } });
+  }
+
+  const contentLength = Number(req.headers['content-length'] || 0);
+  if (Number.isFinite(contentLength) && contentLength > MAX_CONTENT_LENGTH) {
+    return sendJson(res, 413, {
+      error: { message: '요청 본문이 너무 큽니다. 파일을 더 잘게 나눠서 다시 시도해주세요.' },
+    });
+  }
+
+  try {
+    const body = typeof req.body === 'string' ? safeJsonParse(req.body, null) : req.body;
+    if (!body || typeof body !== 'object') {
+      return sendJson(res, 400, { error: { message: '잘못된 JSON 본문입니다.' } });
+    }
+
+    const {
+      apiKey: rawApiKey,
+      system,
+      messages,
+      stream = true,
+      model: rawModel,
+      temperature,
+    } = body;
+
+    const apiKey = rawApiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (!apiKey || typeof apiKey !== 'string') {
+      return sendJson(res, 400, { error: { message: 'API Key가 없습니다.' } });
+    }
+
+    if (!Array.isArray(messages) || messages.length === 0) {
+      return sendJson(res, 400, { error: { message: 'messages가 비어 있습니다.' } });
+    }
+
+    const model = ALLOWED_MODELS.has(rawModel) ? rawModel : DEFAULT_MODEL;
+    const cleanParts = convertAnthropicPartsToGemini(messages);
+    if (cleanParts.length === 0) {
+      return sendJson(res, 400, { error: { message: '전달할 content가 없습니다.' } });
+    }
+
+    const inlineBytes = estimateInlineDataBytes(cleanParts);
+    if (inlineBytes > MAX_INLINE_BYTES) {
+      return sendJson(res, 413, {
+        error: { message: '첨부 이미지/PDF 총 용량이 너무 큽니다. 파일 수를 줄이거나 PDF를 나눠 다시 시도해주세요.' },
+      });
+    }
+
+    const geminiBody = buildGeminiBody({
+      system,
+      parts: cleanParts,
+      stream: Boolean(stream),
+      temperature,
+    });
+
     if (!stream) {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-      const apiRes = await fetch(url, {
+      const apiRes = await fetchWithTimeout(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(geminiBody),
-      });
-      const resText = await apiRes.text();
+      }, NON_STREAM_TIMEOUT);
+
+      const rawText = await apiRes.text();
       if (!apiRes.ok) {
-        let errMsg = 'Gemini API 오류';
-        try { errMsg = JSON.parse(resText).error?.message || errMsg; } catch { errMsg = resText.slice(0, 300); }
-        // 429는 retryAfter와 함께 반환 → 클라이언트가 대기 후 재시도
-        const retryMatch = resText.match(/retry in ([\d.]+)s/i);
-        const retryAfter = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) + 2 : 65;
-        return res.status(apiRes.status).json({ error: { message: errMsg }, retryAfter });
+        return sendJson(res, apiRes.status, buildErrorPayload(apiRes.status, rawText));
       }
-      let text = '';
-      try { const data = JSON.parse(resText); text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || ''; } catch {}
-      return res.status(200).json({ content: [{ type: 'text', text }] });
+
+      const parsed = safeJsonParse(rawText, {});
+      const text = extractGeminiText(parsed);
+      const promptFeedback = extractPromptFeedbackMessage(parsed);
+
+      if (!text && promptFeedback) {
+        return sendJson(res, 422, { error: { message: promptFeedback } });
+      }
+
+      return sendJson(res, 200, {
+        content: [{ type: 'text', text: text || '' }],
+        meta: { model, stream: false },
+      });
     }
 
-    // ── 스트리밍 ──
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
-    const apiRes = await fetch(url, {
+    const apiRes = await fetchWithTimeout(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(geminiBody),
-    });
+    }, STREAM_TIMEOUT);
 
     if (!apiRes.ok) {
-      const errText = await apiRes.text();
-      let errMsg = 'Gemini API 오류';
-      try { errMsg = JSON.parse(errText).error?.message || errMsg; } catch { errMsg = errText.slice(0, 300); }
-      const retryMatch = errText.match(/retry in ([\d.]+)s/i);
-      const retryAfter = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) + 2 : 65;
-      return res.status(apiRes.status).json({ error: { message: errMsg }, retryAfter });
+      const rawText = await apiRes.text();
+      return sendJson(res, apiRes.status, buildErrorPayload(apiRes.status, rawText));
     }
 
-    res.setHeader('Content-Type', 'text/event-stream');
-    res.setHeader('Cache-Control', 'no-cache');
-    res.setHeader('Connection', 'keep-alive');
+    setHeaders(res, STREAM_HEADERS);
+    res.setHeader('X-Proxy-Model', model);
+    res.flushHeaders?.();
 
-    const reader = apiRes.body.getReader();
+    const reader = apiRes.body?.getReader?.();
+    if (!reader) {
+      return sendJson(res, 500, { error: { message: '스트리밍 응답을 읽을 수 없습니다.' } });
+    }
+
+    let buffer = '';
+    let sentText = '';
     const decoder = new TextDecoder();
-    let buf = '';
+
     try {
       while (true) {
         const { done, value } = await reader.read();
-        if (done) { res.write('data: [DONE]\n\n'); break; }
-        buf += decoder.decode(value, { stream: true });
-        const lines = buf.split('\n'); buf = lines.pop();
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          const d = line.slice(6).trim();
-          if (!d || d === '[DONE]') continue;
-          try {
-            const j = JSON.parse(d);
-            const text = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
-            if (text) res.write(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } })}\n\n`);
-          } catch {}
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const events = buffer.split('\n\n');
+        buffer = events.pop() || '';
+
+        for (const eventBlock of events) {
+          const lines = eventBlock
+            .split('\n')
+            .map((line) => line.trim())
+            .filter(Boolean);
+
+          for (const line of lines) {
+            if (!line.startsWith('data:')) continue;
+            const raw = line.slice(5).trim();
+            if (!raw || raw === '[DONE]') continue;
+
+            const parsed = safeJsonParse(raw, null);
+            if (!parsed) continue;
+
+            const promptFeedback = extractPromptFeedbackMessage(parsed);
+            if (promptFeedback) {
+              writeSse(res, { type: 'error', error: { message: promptFeedback } });
+              res.write('data: [DONE]\n\n');
+              res.end();
+              return;
+            }
+
+            const fullText = extractGeminiText(parsed);
+            if (!fullText) continue;
+
+            const prefixLen = commonPrefixLength(sentText, fullText);
+            const delta = fullText.slice(prefixLen);
+            sentText = fullText;
+
+            if (delta) {
+              writeSse(res, {
+                type: 'content_block_delta',
+                delta: { type: 'text_delta', text: delta },
+              });
+            }
+          }
         }
       }
-    } catch {}
-    finally { res.end(); }
 
-  } catch (e) {
-    if (!res.headersSent) res.status(500).json({ error: { message: e.message } });
+      res.write('data: [DONE]\n\n');
+      res.end();
+    } catch (streamErr) {
+      if (!res.writableEnded) {
+        writeSse(res, {
+          type: 'error',
+          error: { message: streamErr?.name === 'AbortError' ? 'Gemini 요청 시간이 초과되었습니다.' : (streamErr?.message || '스트리밍 중 오류가 발생했습니다.') },
+        });
+        res.write('data: [DONE]\n\n');
+        res.end();
+      }
+    } finally {
+      try {
+        await reader.cancel();
+      } catch {}
+    }
+  } catch (err) {
+    return sendJson(res, 500, {
+      error: {
+        message: err?.name === 'AbortError'
+          ? 'Gemini 요청 시간이 초과되었습니다.'
+          : (err?.message || '서버 오류가 발생했습니다.'),
+      },
+    });
   }
 }
