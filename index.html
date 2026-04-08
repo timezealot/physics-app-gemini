@@ -190,8 +190,8 @@ const FILE_LIMITS={
   jpegQuality:.95
 };
 const MODEL_CONFIG={
-  extract:['gemini-2.5-flash','gemini-3-flash-preview','gemini-2.5-flash-lite','gemini-3.1-flash-lite-preview'],
-  analysis:['gemini-2.5-flash-lite','gemini-2.5-flash','gemini-3.1-flash-lite-preview','gemini-3-flash-preview']
+  extract:'gemini-2.5-flash',
+  analysis:'gemini-2.5-flash-lite'
 };
 
 function getAllStoredFiles(){return [...bulkStore.q,...bulkStore.a,...bulkStore.s];}
@@ -384,6 +384,15 @@ function missingProblemNumbers(found,target){
 }
 function buildCoverageWarning(missing,label){
   return `${label} 누락: ${missing.map(n=>`${n}번`).join(', ')}`;
+}
+function parseProblemNumbersFromAnyText(text){
+  const found=new Set();
+  const s=String(text||'');
+  for(const m of s.matchAll(/\[문제번호\]\s*(\d+)/g)) found.add(parseInt(m[1],10));
+  for(const m of s.matchAll(/\[문제\s*(\d+)\]/g)) found.add(parseInt(m[1],10));
+  for(const m of s.matchAll(/문제\s*(\d+)\s*(?:피드백|번)?/g)) found.add(parseInt(m[1],10));
+  for(const m of s.matchAll(/(^|\n)\s*(\d+)번\s*[:：]/g)) found.add(parseInt(m[2],10));
+  return [...found].filter(n=>Number.isFinite(n)&&n>0).sort((a,b)=>a-b);
 }
 
 
@@ -758,6 +767,29 @@ async function analyze(){
 - 이미 출력한 문제를 다시 쓰지 말고 누락된 문제도 포함한 완전한 최종본을 다시 출력한다.
 - 형식은 기존과 동일한 최종본 전체를 다시 출력한다.`;
 
+  const OCR_EXPLANATION_SYSTEM=`물리1 해설 OCR 전사기.
+
+목표:
+- 해설 자료를 눈에 보이는 순서대로 최대한 그대로 텍스트로 전사한다.
+- 요약, 계산, 정리, 추론 금지.
+- 문제번호, 정답, 풀이식, 줄바꿈을 최대한 보존한다.
+
+규칙:
+- 보이는 내용을 그대로 옮기고 안 보이는 부분만 (불명확) 처리
+- 여러 문제면 문제번호가 보이는 순서대로 이어서 전사
+- 표나 두 단 배치라도 위→아래, 좌→우 기준으로 읽는다.`;
+
+  const OCR_STUDENT_SYSTEM=`학생 풀이 OCR 전사기.
+
+목표:
+- 학생 풀이 사진/PDF의 식, 계산, 최종답을 최대한 그대로 전사한다.
+- 정리, 해석, 보정 금지.
+
+규칙:
+- 문제번호가 보이면 함께 적는다.
+- 식/계산/답이 구분되면 줄바꿈 유지
+- 안 보이는 부분만 (불명확) 처리`;
+
   const FMT_PROBLEM=`
 =====
 문제N 피드백
@@ -814,51 +846,63 @@ O
 
   const parseProxyError=(raw,fallback='API 오류')=>{
     let errMsg=fallback;
-    let retryAfter=20;
-    let meta={};
+    let retryAfter=65;
     try{
       const j=JSON.parse(raw);
       errMsg=j.error?.message||fallback;
       if(j.retryAfter)retryAfter=j.retryAfter;
-      meta=j.meta||{};
     }catch{
       const m=String(raw||'').match(/retry in ([\d.]+)s/i);
       if(m)retryAfter=Math.ceil(parseFloat(m[1]))+2;
       errMsg=String(raw||fallback).slice(0,300);
     }
-    return {errMsg,retryAfter,meta};
-  };
-
-  const isTransientModelBusy=(status,msg='')=>{
-    const t=String(msg||'').toLowerCase();
-    return [429,500,502,503,504].includes(status)||t.includes('high demand')||t.includes('temporarily unavailable')||t.includes('resource exhausted')||t.includes('overloaded')||t.includes('try again later');
-  };
-
-  const normalizeModelList=(modelOrList,fallbackList=[])=>{
-    const arr=[].concat(modelOrList||[]).concat(fallbackList||[]).filter(Boolean);
-    return [...new Set(arr)];
+    return {errMsg,retryAfter};
   };
 
   const callText=async(system,parts,{attempt=0,model=MODEL_CONFIG.extract}={})=>{
-    const models=normalizeModelList(model);
-    const primaryModel=models[0];
-    const fallbackModels=models.slice(1);
     let res;
     try{
       res=await fetchWithTimeout('/api/proxy',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({apiKey,stream:false,system,model:primaryModel,fallbackModels,messages:[{role:'user',content:parts}]})
+        body:JSON.stringify({apiKey,stream:false,system,model,messages:[{role:'user',content:parts}]})
       },240000);
     }catch(e){throw new Error(e.message);}
 
     const raw=await res.text();
     if(!res.ok){
       const {errMsg,retryAfter}=parseProxyError(raw);
-      if(isTransientModelBusy(res.status,errMsg)&&attempt<1){
-        setMsg(`⏳ 모델 혼잡으로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 대체 모델 포함 1회만 재시도합니다.</small>`);
-        await new Promise(r=>setTimeout(r,Math.min(retryAfter,12 + attempt*8)*1000));
-        return callText(system,parts,{attempt:attempt+1,model:models});
+      if(res.status===429 && attempt<1){
+        setMsg(`⏳ quota 초과로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 1회만 재시도합니다.</small>`);
+        await new Promise(r=>setTimeout(r,retryAfter*1000));
+        return callText(system,parts,{attempt:attempt+1,model});
+      }
+      throw new Error(errMsg);
+    }
+    try{
+      const data=JSON.parse(raw);
+      return data.content?.map(c=>c.text||'').join('').trim()||'';
+    }catch{
+      return raw.trim();
+    }
+  };
+
+  const callPlainOcr=async(system,parts,{attempt=0,model=MODEL_CONFIG.extract}={})=>{
+    let res;
+    try{
+      res=await fetchWithTimeout('/api/proxy',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({apiKey,stream:false,system,model,messages:[{role:'user',content:parts}]})
+      },240000);
+    }catch(e){throw new Error(e.message);}
+    const raw=await res.text();
+    if(!res.ok){
+      const {errMsg,retryAfter}=parseProxyError(raw);
+      if(res.status===429 && attempt<1){
+        setMsg(`⏳ OCR quota 초과로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 1회만 재시도합니다.</small>`);
+        await new Promise(r=>setTimeout(r,retryAfter*1000));
+        return callPlainOcr(system,parts,{attempt:attempt+1,model});
       }
       throw new Error(errMsg);
     }
@@ -871,25 +915,22 @@ O
   };
 
   const streamCall=async(system,parts,onChunk,{attempt=0,model=MODEL_CONFIG.analysis}={})=>{
-    const models=normalizeModelList(model);
-    const primaryModel=models[0];
-    const fallbackModels=models.slice(1);
     let res;
     try{
       res=await fetchWithTimeout('/api/proxy',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({apiKey,system,model:primaryModel,fallbackModels,messages:[{role:'user',content:parts}]})
+        body:JSON.stringify({apiKey,system,model,messages:[{role:'user',content:parts}]})
       },240000);
     }catch(e){throw new Error(e.message);}
 
     if(!res.ok){
       const errText=await res.text();
       const {errMsg,retryAfter}=parseProxyError(errText);
-      if(isTransientModelBusy(res.status,errMsg)&&attempt<1){
-        setMsg(`⏳ 모델 혼잡으로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 대체 모델 포함 1회만 재시도합니다.</small>`);
-        await new Promise(r=>setTimeout(r,Math.min(retryAfter,12 + attempt*8)*1000));
-        return streamCall(system,parts,onChunk,{attempt:attempt+1,model:models});
+      if(res.status===429 && attempt<1){
+        setMsg(`⏳ quota 초과로 잠시 대기 중...<br><small style="color:var(--text3)">${retryAfter}초 후 1회만 재시도합니다.</small>`);
+        await new Promise(r=>setTimeout(r,retryAfter*1000));
+        return streamCall(system,parts,onChunk,{attempt:attempt+1,model});
       }
       throw new Error(errMsg);
     }
@@ -921,10 +962,8 @@ O
     }
   };
 
-  const buildExplanationExtractParts=(missingNums=[])=>{
+  const buildExplanationOcrParts=()=>{
     const parts=[];
-    const missingHint=missingNums.length?`누락 의심 문제: ${missingNums.map(n=>`${n}번`).join(', ')}`:'';
-    parts.push({type:'text',text:`${rangeLabel} 해설 자료에서 문제별 정답과 풀이원문만 추출하세요. ${missingHint}`.trim()});
     if(aT)parts.push({type:'text',text:`[해설 텍스트 원본]\n${aT}`});
     bulkStore.a.forEach((file,ii)=>{
       parts.push({type:'text',text:`[해설 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
@@ -934,23 +973,65 @@ O
     return parts;
   };
 
+  const buildStudentOcrParts=()=>{
+    const parts=[];
+    if(sT)parts.push({type:'text',text:`[학생 풀이 텍스트 원본]\n${sT}`});
+    bulkStore.s.forEach((file,ii)=>{
+      parts.push({type:'text',text:`[학생 풀이 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
+      if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+      else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
+    });
+    return parts;
+  };
+
+  const buildExplanationExtractParts=(ocrText='',missingNums=[],useFiles=false)=>{
+    const parts=[];
+    const missingHint=missingNums.length?`누락 의심 문제: ${missingNums.map(n=>`${n}번`).join(', ')}`:'';
+    parts.push({type:'text',text:`${rangeLabel} 해설 자료에서 문제별 정답과 풀이원문만 추출하세요. ${missingHint}`.trim()});
+    if(ocrText)parts.push({type:'text',text:`[해설 OCR 전사본]\n${ocrText}`});
+    if(aT&&!ocrText)parts.push({type:'text',text:`[해설 텍스트 원본]\n${aT}`});
+    if(useFiles||!ocrText){
+      bulkStore.a.forEach((file,ii)=>{
+        parts.push({type:'text',text:`[해설 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
+        if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
+      });
+    }
+    return parts;
+  };
+
   const parseExtractedSolutions=(raw)=>{
     const map={};
-    const re=/\[문제번호\]\s*(\d+)\s*\n([\s\S]*?)\[\/문제번호\]/g;
+    const src=String(raw||'');
+    const blockRe=/\[(?:문제번호|문제)\]\s*(\d+)\s*\n([\s\S]*?)\[\/(?:문제번호|문제)\]/g;
     let m;
-    while((m=re.exec(raw))){
+    while((m=blockRe.exec(src))){
       const num=m[1];
       const body=m[2].trim();
       const ans=(body.match(/정답\s*:\s*([①②③④⑤])/)||[])[1]||'';
-      let sol='';
       const sm=body.match(/풀이원문\s*:\s*\n?([\s\S]*)$/);
-      if(sm)sol=sm[1].trim();
+      const sol=(sm?sm[1]:'').trim();
       if(ans||sol)map[num]={answer:ans,solution:sol};
     }
+    if(Object.keys(map).length)return map;
+
+    const nums=parseProblemNumbersFromAnyText(src);
+    if(!nums.length)return map;
+    nums.forEach((num,idx)=>{
+      const next=nums[idx+1];
+      const startIdx=src.search(new RegExp(`(?:\\[문제번호\\]|\\[문제\\]|문제\\s*)\\s*${num}`));
+      const endIdx=next?src.slice(startIdx+1).search(new RegExp(`(?:\\[문제번호\\]|\\[문제\\]|문제\\s*)\\s*${next}`)):-1;
+      const body=endIdx>=0?src.slice(startIdx,startIdx+1+endIdx):src.slice(startIdx);
+      const ans=(body.match(/정답\s*[:：]\s*([①②③④⑤])/)||[])[1]||'';
+      let sol='';
+      const sm=body.match(/(?:풀이원문|풀이)\s*[:：]\s*\n?([\s\S]*)$/);
+      if(sm)sol=sm[1].trim();
+      if(ans||sol)map[String(num)]={answer:ans,solution:sol};
+    });
     return map;
   };
 
-  const buildAnalysisParts=(extractedRaw)=>{
+  const buildAnalysisParts=(extractedRaw,studentOcrText='')=>{
     const parts=[];
     const answerEntries=Object.entries(bulkStudentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
     const correctEntries=Object.entries(bulkCorrectAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
@@ -967,12 +1048,15 @@ O
       else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
     });
 
-    if(sT)parts.push({type:'text',text:`[학생 풀이 텍스트]\n${sT}`});
-    bulkStore.s.forEach((file,ii)=>{
-      parts.push({type:'text',text:`[학생 풀이 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
-      if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
-      else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
-    });
+    if(studentOcrText)parts.push({type:'text',text:`[학생 풀이 OCR 전사본]\n${studentOcrText}`});
+    else if(sT)parts.push({type:'text',text:`[학생 풀이 텍스트]\n${sT}`});
+    if(!studentOcrText){
+      bulkStore.s.forEach((file,ii)=>{
+        parts.push({type:'text',text:`[학생 풀이 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
+        if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
+      });
+    }
     return parts;
   };
 
@@ -998,15 +1082,21 @@ O
   try{
     const targets=getTargetProblemNumbers();
 
-    setMsg('1/2 해설 원문을 고정 추출 중입니다...');
-    let extractedRaw=await callText(EXTRACT_SYSTEM,buildExplanationExtractParts(),{model:MODEL_CONFIG.extract});
+    setMsg('1/3 해설 자료를 OCR 전사 중입니다...');
+    let explanationOcrText=aT||'';
+    if(bulkStore.a.length){
+      explanationOcrText=await callPlainOcr(OCR_EXPLANATION_SYSTEM,buildExplanationOcrParts(),{model:MODEL_CONFIG.extract});
+    }
+
+    setMsg('2/3 해설 원문을 구조화 중입니다...');
+    let extractedRaw=await callText(EXTRACT_SYSTEM,buildExplanationExtractParts(explanationOcrText,[],false),{model:MODEL_CONFIG.extract});
     let solutionMap=parseExtractedSolutions(extractedRaw);
 
     if(targets.length){
       const missing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),targets);
       if(missing.length){
-        setMsg(`1/2 해설 원문 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'해설 추출')}</small>`);
-        const retryRaw=await callText(EXTRACT_RETRY_SYSTEM,buildExplanationExtractParts(missing),{model:MODEL_CONFIG.extract});
+        setMsg(`2/3 해설 원문 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'해설 추출')}</small>`);
+        const retryRaw=await callText(EXTRACT_RETRY_SYSTEM,buildExplanationExtractParts(explanationOcrText,missing,true),{model:MODEL_CONFIG.extract});
         const retryMap=parseExtractedSolutions(retryRaw);
         solutionMap={...solutionMap,...retryMap};
         extractedRaw=Object.entries(solutionMap).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([num,data])=>`[문제번호] ${num}\n정답: ${data.answer||'(불명확)'}\n풀이원문:\n${(data.solution||'(불명확)').trim()}\n[/문제번호]`).join('\n\n');
@@ -1016,10 +1106,23 @@ O
     if(!Object.keys(solutionMap).length)throw new Error('해설 원문 추출에 실패했습니다. 해설 이미지/PDF의 해상도나 배치를 확인해주세요.');
     if(targets.length){
       const stillMissing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),targets);
-      if(stillMissing.length)throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(stillMissing,'해설 추출')}`);
+      if(stillMissing.length){
+        const ocrDetected=parseProblemNumbersFromAnyText(explanationOcrText);
+        if(ocrDetected.length && !Object.keys(bulkCorrectAnswers).length && !Object.keys(bulkStudentAnswers).length){
+          const relaxedMissing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),ocrDetected);
+          if(relaxedMissing.length)throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(relaxedMissing,'해설 추출')}`);
+        }else{
+          throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(stillMissing,'해설 추출')}`);
+        }
+      }
     }
 
-    setMsg('2/2 추출된 해설 원문 기준으로 학생 풀이를 분석 중입니다...');
+    setMsg('3/3 학생 풀이를 OCR 전사 후 분석 중입니다...');
+    let studentOcrText=sT||'';
+    if(bulkStore.s.length){
+      studentOcrText=await callPlainOcr(OCR_STUDENT_SYSTEM,buildStudentOcrParts(),{model:MODEL_CONFIG.extract});
+    }
+
     rc.innerHTML='';
     let fullText='';
     const sc=document.createElement('div');
@@ -1031,7 +1134,7 @@ O
     const runAnalysisOnce=async(system)=>{
       fullText='';
       streamEl.textContent='';
-      await streamCall(system,buildAnalysisParts(extractedRaw),chunk=>{fullText+=chunk;streamEl.textContent=fullText;},{model:MODEL_CONFIG.analysis});
+      await streamCall(system,buildAnalysisParts(extractedRaw,studentOcrText),chunk=>{fullText+=chunk;streamEl.textContent=fullText;},{model:MODEL_CONFIG.analysis});
       return fullText;
     };
 
@@ -1042,7 +1145,7 @@ O
       const found=extractProblemNumbersFromResult(analysisText);
       const missing=missingProblemNumbers(found,targets);
       if(missing.length){
-        setMsg(`2/2 분석 결과 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'분석 결과')}</small>`);
+        setMsg(`3/3 분석 결과 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'분석 결과')}</small>`);
         analysisText=await runAnalysisOnce(`${ANALYSIS_SYSTEM}\n\n${ANALYSIS_RETRY_SYSTEM}`);
       }
     }
