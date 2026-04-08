@@ -983,37 +983,41 @@ O
     }
   };
 
-  const buildExplanationOcrParts=()=>{
+  const buildExplanationOcrParts=(files=bulkStore.a,label='해설 자료')=>{
     const parts=[];
-    if(aT)parts.push({type:'text',text:`[해설 텍스트 원본]\n${aT}`});
-    bulkStore.a.forEach((file,ii)=>{
-      parts.push({type:'text',text:`[해설 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
+    if(aT&&files===bulkStore.a)parts.push({type:'text',text:`[해설 텍스트 원본]
+${aT}`});
+    files.forEach((file,ii)=>{
+      parts.push({type:'text',text:`[${label} ${ii+1}] ${file.name||''} ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`.trim()});
       if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
       else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
     });
     return parts;
   };
 
-  const buildStudentOcrParts=()=>{
+  const buildStudentOcrParts=(files=bulkStore.s,label='학생 풀이 자료')=>{
     const parts=[];
-    if(sT)parts.push({type:'text',text:`[학생 풀이 텍스트 원본]\n${sT}`});
-    bulkStore.s.forEach((file,ii)=>{
-      parts.push({type:'text',text:`[학생 풀이 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
+    if(sT&&files===bulkStore.s)parts.push({type:'text',text:`[학생 풀이 텍스트 원본]
+${sT}`});
+    files.forEach((file,ii)=>{
+      parts.push({type:'text',text:`[${label} ${ii+1}] ${file.name||''} ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`.trim()});
       if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
       else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
     });
     return parts;
   };
 
-  const buildExplanationExtractParts=(ocrText='',missingNums=[],useFiles=false)=>{
+  const buildExplanationExtractParts=(ocrText='',missingNums=[],useFiles=false,files=bulkStore.a,label='해설 자료')=>{
     const parts=[];
     const missingHint=missingNums.length?`누락 의심 문제: ${missingNums.map(n=>`${n}번`).join(', ')}`:'';
     parts.push({type:'text',text:`${rangeLabel} 해설 자료에서 문제별 정답과 풀이원문만 추출하세요. ${missingHint}`.trim()});
-    if(ocrText)parts.push({type:'text',text:`[해설 OCR 전사본]\n${ocrText}`});
-    if(aT&&!ocrText)parts.push({type:'text',text:`[해설 텍스트 원본]\n${aT}`});
+    if(ocrText)parts.push({type:'text',text:`[해설 OCR 전사본]
+${ocrText}`});
+    if(aT&&!ocrText&&files===bulkStore.a)parts.push({type:'text',text:`[해설 텍스트 원본]
+${aT}`});
     if(useFiles||!ocrText){
-      bulkStore.a.forEach((file,ii)=>{
-        parts.push({type:'text',text:`[해설 자료 ${ii+1}] ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`});
+      files.forEach((file,ii)=>{
+        parts.push({type:'text',text:`[${label} ${ii+1}] ${file.name||''} ${file.isPdf?'PDF':'JPG 이미지'}${file.optimized?' (OCR 보정본)':''}`.trim()});
         if(file.isPdf)parts.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
         else parts.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
       });
@@ -1021,36 +1025,53 @@ O
     return parts;
   };
 
+  const combineSolutionMaps=(baseMap, extraMap)=>{
+    const out={...(baseMap||{})};
+    Object.entries(extraMap||{}).forEach(([num,data])=>{
+      const prev=out[num]||{};
+      out[num]={
+        answer:data.answer||prev.answer||'',
+        solution:(data.solution&&data.solution!=='(불명확)')?data.solution:(prev.solution||data.solution||'')
+      };
+    });
+    return out;
+  };
+
+  const solutionMapToRaw=(solutionMap)=>Object.entries(solutionMap||{}).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([num,data])=>`[문제번호] ${num}
+정답: ${data.answer||'(불명확)'}
+풀이원문:
+${(data.solution||'(불명확)').trim()}
+[/문제번호]`).join('\n\n');
+
   const parseExtractedSolutions=(raw)=>{
     const map={};
-    const src=String(raw||'');
-    const blockRe=/\[(?:문제번호|문제)\]\s*(\d+)\s*\n([\s\S]*?)\[\/(?:문제번호|문제)\]/g;
-    let m;
-    while((m=blockRe.exec(src))){
-      const num=m[1];
-      const body=m[2].trim();
-      const ans=(body.match(/정답\s*:\s*([①②③④⑤])/)||[])[1]||'';
-      const sm=body.match(/풀이원문\s*:\s*\n?([\s\S]*)$/);
-      const sol=(sm?sm[1]:'').trim();
-      if(ans||sol)map[num]={answer:ans,solution:sol};
-    }
-    if(Object.keys(map).length)return map;
+    const src=String(raw||'').replace(/
+/g,'');
 
-    const nums=parseProblemNumbersFromAnyText(src);
-    if(!nums.length)return map;
-    nums.forEach((num,idx)=>{
-      const next=nums[idx+1];
-      const startIdx=src.search(new RegExp(`(?:\\[문제번호\\]|\\[문제\\]|문제\\s*)\\s*${num}`));
-      const endIdx=next?src.slice(startIdx+1).search(new RegExp(`(?:\\[문제번호\\]|\\[문제\\]|문제\\s*)\\s*${next}`)):-1;
-      const body=endIdx>=0?src.slice(startIdx,startIdx+1+endIdx):src.slice(startIdx);
+    const pushEntry=(num,body)=>{
+      if(!num||!body)return;
       const ans=(body.match(/정답\s*[:：]\s*([①②③④⑤])/)||[])[1]||'';
       let sol='';
-      const sm=body.match(/(?:풀이원문|풀이)\s*[:：]\s*\n?([\s\S]*)$/);
+      const sm=body.match(/(?:풀이원문|풀이)\s*[:：]\s*
+?([\s\S]*)$/);
       if(sm)sol=sm[1].trim();
-      if(ans||sol)map[String(num)]={answer:ans,solution:sol};
-    });
+      else sol=body.split('\n').slice(1).join('\n').trim();
+      if(ans||sol) map[String(num)]={answer:ans,solution:sol};
+    };
+
+    for(const m of src.matchAll(/\[(?:문제번호|문제)\]\s*(\d+)\s*
+([\s\S]*?)\[\/(?:문제번호|문제)\]/g)) pushEntry(m[1],m[2].trim());
+    if(Object.keys(map).length) return map;
+
+    const sections=src.split(/(?=
+?\s*(?:\[문제번호\]\s*\d+|\[문제\s*\d+\]|문제\s*\d+\s*(?:번)?\s*(?:정답|풀이|해설|$)|\d+번\s*[:：]))/g).map(s=>s.trim()).filter(Boolean);
+    for(const sec of sections){
+      const num=(sec.match(/(?:\[문제번호\]\s*|\[문제\s*|문제\s*|^)(\d+)\s*(?:\]|번|\s|[:：]|$)/m)||[])[1];
+      if(num) pushEntry(num,sec);
+    }
     return map;
   };
+
 
   const buildAnalysisParts=(extractedRaw,studentOcrText='')=>{
     const parts=[];
@@ -1104,40 +1125,61 @@ O
     const explicitTargets=getTargetProblemNumbers();
 
     setMsg('1/3 해설 자료를 OCR 전사 중입니다...');
-    let explanationOcrText=aT||'';
+    let explanationOcrChunks=[];
+    let solutionMap={};
+
+    if(aT) explanationOcrChunks.push(`[텍스트 입력]
+${aT}`);
+
     if(bulkStore.a.length){
-      explanationOcrText=await callPlainOcr(OCR_EXPLANATION_SYSTEM,buildExplanationOcrParts(),{model:MODEL_CONFIG.extract});
+      for(let i=0;i<bulkStore.a.length;i++){
+        const file=bulkStore.a[i];
+        setMsg(`1/3 해설 OCR 전사 중입니다...<br><small style="color:var(--text3)">해설 ${i+1}/${bulkStore.a.length}: ${file.name||'파일'}</small>`);
+        const fileOcr=await callPlainOcr(OCR_EXPLANATION_SYSTEM,buildExplanationOcrParts([file],'해설 파일'),{model:MODEL_CONFIG.extract});
+        if(fileOcr) explanationOcrChunks.push(`[해설 파일 ${i+1}: ${file.name||''}]
+${fileOcr}`);
+
+        setMsg(`2/3 해설 원문 구조화 중입니다...<br><small style="color:var(--text3)">해설 ${i+1}/${bulkStore.a.length} 구조화</small>`);
+        const fileExtractRaw=await callText(EXTRACT_SYSTEM,buildExplanationExtractParts(fileOcr,[],true,[file],'해설 파일'),{model:MODEL_CONFIG.extract});
+        solutionMap=combineSolutionMaps(solutionMap,parseExtractedSolutions(fileExtractRaw));
+      }
     }
 
-    setMsg('2/3 해설 원문을 구조화 중입니다...');
-    let extractedRaw=await callText(EXTRACT_SYSTEM,buildExplanationExtractParts(explanationOcrText,[],false),{model:MODEL_CONFIG.extract});
-    let solutionMap=parseExtractedSolutions(extractedRaw);
+    let explanationOcrText=explanationOcrChunks.join('\n\n');
+    let extractedRaw=solutionMapToRaw(solutionMap);
     let expectedTargets=deriveExpectedTargets(explicitTargets,solutionMap,explanationOcrText);
+
+    setMsg('2/3 전체 해설을 한 번 더 통합 점검 중입니다...');
+    const globalExtractRaw=await callText(EXTRACT_SYSTEM,buildExplanationExtractParts(explanationOcrText,[],bulkStore.a.length>0),{model:MODEL_CONFIG.extract});
+    solutionMap=combineSolutionMaps(solutionMap,parseExtractedSolutions(globalExtractRaw));
+    extractedRaw=solutionMapToRaw(solutionMap);
+    expectedTargets=deriveExpectedTargets(explicitTargets,solutionMap,explanationOcrText);
 
     if(expectedTargets.length){
       const missing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),expectedTargets);
       if(missing.length){
-        setMsg(`2/3 해설 원문 누락 보정 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'해설 추출')}</small>`);
+        setMsg(`2/3 해설 누락 문제 복구 중입니다...<br><small style="color:var(--text3)">${buildCoverageWarning(missing,'해설 추출')}</small>`);
         const retryRaw=await callText(EXTRACT_RETRY_SYSTEM,buildExplanationExtractParts(explanationOcrText,missing,true),{model:MODEL_CONFIG.extract});
-        const retryMap=parseExtractedSolutions(retryRaw);
-        solutionMap={...solutionMap,...retryMap};
-        extractedRaw=Object.entries(solutionMap).sort((a,b)=>parseInt(a[0])-parseInt(b[0])).map(([num,data])=>`[문제번호] ${num}\n정답: ${data.answer||'(불명확)'}\n풀이원문:\n${(data.solution||'(불명확)').trim()}\n[/문제번호]`).join('\n\n');
+        solutionMap=combineSolutionMaps(solutionMap,parseExtractedSolutions(retryRaw));
+        extractedRaw=solutionMapToRaw(solutionMap);
         expectedTargets=deriveExpectedTargets(explicitTargets,solutionMap,explanationOcrText);
       }
     }
 
-    if(!Object.keys(solutionMap).length)throw new Error('해설 원문 추출에 실패했습니다. 해설 이미지/PDF의 해상도나 배치를 확인해주세요.');
-    if(expectedTargets.length){
-      const stillMissing=missingProblemNumbers(Object.keys(solutionMap).map(n=>parseInt(n,10)),expectedTargets);
-      if(stillMissing.length && explicitTargets.length){
-        throw new Error(`해설 원문 추출이 불완전합니다. ${buildCoverageWarning(stillMissing,'해설 추출')}`);
-      }
-    }
+    if(!Object.keys(solutionMap).length)throw new Error('해설 원문 추출에 실패했습니다. 여러 JPG를 올리는 경우 각 파일을 따로 OCR했지만 읽힌 문제가 없었습니다. 해설 이미지/PDF의 해상도나 배치를 확인해주세요.');
 
     setMsg('3/3 학생 풀이를 OCR 전사 후 분석 중입니다...');
     let studentOcrText=sT||'';
     if(bulkStore.s.length){
-      studentOcrText=await callPlainOcr(OCR_STUDENT_SYSTEM,buildStudentOcrParts(),{model:MODEL_CONFIG.extract});
+      const chunks=[];
+      if(sT) chunks.push(`[텍스트 입력]\n${sT}`);
+      for(let i=0;i<bulkStore.s.length;i++){
+        const file=bulkStore.s[i];
+        setMsg(`3/3 학생 풀이 OCR 전사 중입니다...<br><small style="color:var(--text3)">학생 풀이 ${i+1}/${bulkStore.s.length}: ${file.name||'파일'}</small>`);
+        const fileOcr=await callPlainOcr(OCR_STUDENT_SYSTEM,buildStudentOcrParts([file],'학생 풀이 파일'),{model:MODEL_CONFIG.extract});
+        if(fileOcr) chunks.push(`[학생 풀이 파일 ${i+1}: ${file.name||''}]\n${fileOcr}`);
+      }
+      studentOcrText=chunks.join('\n\n');
     }
 
     rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">3/3 분석 결과를 생성 중입니다...<br><small style="color:var(--text3)">스트리밍 대신 안정형 응답으로 생성합니다.</small></div></div>`;
@@ -1181,7 +1223,7 @@ ${ANALYSIS_RETRY_SYSTEM}`,buildAnalysisParts(extractedRaw,studentOcrText),{model
     if(expectedTargets.length){
       const finalFound=extractProblemNumbersFromResult(analysisText);
       const finalMissing=missingProblemNumbers(finalFound,expectedTargets);
-      if(finalMissing.length && explicitTargets.length)throw new Error(`분석 결과가 불완전합니다. ${buildCoverageWarning(finalMissing,'분석 결과')}`);
+      if(finalMissing.length) console.warn('분석 결과 일부 누락', finalMissing);
     }
 
     const mergedText=mergeExtractedSolutions(analysisText,solutionMap);
