@@ -279,9 +279,9 @@ X
 3단계: F x d = 20N x 4d + 50N x 9d = 80d + 450d = 530d
 4단계: F = 530N → 정답 ③
 ▶ 4. 학생 풀이 정리
-- 학생이 세운 식: F x d = 50N x 9d = 450d
+- 학생이 세운 식: (학생 풀이 이미지에서 읽은 식)
 - 학생의 계산 과정: (이미지 참조)
-- 학생의 최종 답: F = 450N
+- 학생의 최종 답: (학생 풀이 이미지에서 읽은 답)
 ▶ 5. 풀이 피드백
 - 해설 기준 평가: 학생은 나무판 무게(20N)에 의한 돌림힘 항을 식에서 누락했습니다. 해설에서는 F x d = 20N x 4d + 50N x 9d = 530d로 세워야 합니다.
 - 개선점: 풀이 시작 전 작용점 목록을 먼저 나열한 뒤 식을 세우세요. 나무판 무게중심 위치(4d)가 제시된 이유를 파악하는 연습이 필요합니다.
@@ -303,9 +303,9 @@ O
 3단계: 막대 1: mg x L = F x 2L → F = mg/2
 4단계: 막대 2: mg x L = F x 2L → 동일하게 F = mg/2
 ▶ 4. 학생 풀이 정리
-- 학생이 세운 식: Στ = 0 적용, F = mg/2
+- 학생이 세운 식: (학생 풀이 이미지에서 읽은 식)
 - 학생의 계산 과정: (이미지 참조)
-- 학생의 최종 답: F = mg/2
+- 학생의 최종 답: (학생 풀이 이미지에서 읽은 답)
 ▶ 5. 풀이 피드백
 - 해설 기준 평가: 학생은 해설과 동일한 논리 흐름으로 풀이를 진행했습니다.
 - 개선점: 없음.
@@ -428,34 +428,29 @@ async function analyze(){
   document.getElementById('resultView').classList.add('visible');
   const rc=document.getElementById('resultContent');
   rc.innerHTML=`<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">${isMock?'🧪 샘플 결과 로딩 중...':'AI가 풀이를 분석하고 있습니다...'}<br><small style="color:var(--text3)">${isMock?'실제 API 호출 없음':'사진이 많으면 조금 더 걸릴 수 있어요'}</small></div></div>`;
-
   if(isMock){setTimeout(()=>renderResult(MOCK_RESPONSE,rc),800);return;}
 
   const SYSTEM=`물리1 교사. 학생 풀이 분석·피드백 작성.
 
 【풀이법(▶ 3.) 작성 — 절대 규칙】
-[해설 텍스트]와 [해설 원본 이미지]가 모두 제공됩니다:
-- 먼저 [해설 텍스트]에서 해당 문제의 [문제N] 섹션을 찾으세요.
-- 텍스트의 수식이 이미지와 다르면 반드시 이미지를 우선으로 사용하세요.
-- 각 풀이 단계를 "1단계: ...", "2단계: ..." 형식으로 수식·수치·기호를 한 글자도 바꾸지 말고 그대로 옮겨 쓰세요.
-- 분수(4L/13), 계수(3mg), 첨자(T', d1)를 특히 주의해서 확인하세요.
-- 자신의 물리 지식으로 해설을 수정·보완·재해석하는 것을 절대 금지합니다.
-- 해설에 없는 단계·수식·개념 추가 절대 금지.
+해설에 나온 내용을 수식·수치·기호 한 글자도 바꾸지 말고 그대로 단계별로 옮겨 쓰세요.
+- "1단계: ΣF=0 적용", "2단계: T=mg" 형식으로 해설 순서대로
+- 해설에 없는 단계·수식·개념 추가 절대 금지
+- AI의 물리 지식으로 수정·보완·재해석 절대 금지
+- 분수(4L/13), 계수(3mg), 첨자(T', d1) 특히 주의
 
 【피드백(▶ 5.) 작성 규칙】
-피드백은 AI가 작성하되 반드시 아래 기준을 지키세요:
-1. 물리학1 교육과정 범위 내 개념만 사용 (힘의 평형 ΣF=0, 돌림힘 평형 Στ=0, 뉴턴 운동법칙 F=ma, 운동량·충격량, 역학적 에너지 보존 등)
-2. 해설 기준으로만 평가: 학생 풀이(▶4)와 해설(▶3)을 비교해 어느 단계에서 차이가 있는지 서술. 해설에 없는 오류 창작 금지.
-3. 구체성: 학생이 실제로 쓴 식과 해설의 식을 대조해 어느 부분이 다른지 명시. "식을 잘못 세웠습니다" 같은 막연한 표현 금지.
-4. 정답이고 해설과 동일 흐름이면 "해설과 동일한 접근"으로 인정.
+- 물리학1 범위 개념만 사용 (ΣF=0, Στ=0, F=ma, 운동량·충격량, 역학적에너지 등)
+- 학생 풀이(▶4)와 해설(▶3)을 단계별로 비교해 구체적으로 서술
+- 학생이 쓴 식과 해설 식을 직접 대조해 차이 명시. "식을 잘못 세웠습니다" 같은 막연한 표현 금지
+- 해설에 없는 오류 창작 금지. 정답이고 해설과 동일 흐름이면 "해설과 동일한 접근"으로 인정
 
 규칙:
-- 정답(▶ 1.): 해설에서 확인한 원문자(①②③④⑤)만.
-- 정오답(▶ 2.): 학생정답↔해설정답 비교, O/X만.
-- 학생풀이정리(▶ 4.): 학생풀이에서 해당 문제 찾아 식·계산·최종답 그대로 정리. 추측금지.
-- 점수(▶ 6.): 해설기준. "평가불가"금지. 형식: X점/10점|이유:한문장
-- 형식(▶ =====)변경금지. LaTeX금지. 인사말금지.
-- 이미지: m/2m=질량(kg), mg/2mg=중력(N). 질감→질량, 막돼→막대, 마철→마찰.`;
+- 정답(▶1): 해설 확인 원문자(①②③④⑤)만. 직접계산 금지.
+- 정오답(▶2): 학생정답↔해설정답 비교, O/X만.
+- 학생풀이정리(▶4): 학생풀이에서 식·계산·최종답 그대로 정리. 추측금지.
+- 점수(▶6): 해설기준. 평가불가금지. 형식: X점/10점|이유:한문장
+- 형식(▶ =====)변경금지. LaTeX금지. 인사말금지.`;
 
   const FMT_PROBLEM=`
 =====
@@ -466,21 +461,21 @@ async function analyze(){
 ▶ 2. 정오답 판단
 O
 ▶ 3. 문제 풀이법
-1단계: (해설 내용 그대로)
-2단계: (해설 내용 그대로)
-3단계: (해설 수식·수치 그대로)
-4단계: (해설의 최종 결론)
+1단계:
+2단계:
+3단계:
+4단계:
 ▶ 4. 학생 풀이 정리
-- 학생이 세운 식: (학생 풀이에서 읽은 식)
-- 학생의 계산 과정: (학생 풀이에서 읽은 계산)
-- 학생의 최종 답: (학생 풀이에서 읽은 답)
+- 학생이 세운 식:
+- 학생의 계산 과정:
+- 학생의 최종 답:
 ▶ 5. 풀이 피드백
-- 해설 기준 평가: (학생 풀이를 해설과 비교한 평가)
-- 개선점: (구체적인 개선 방향)
+- 해설 기준 평가:
+- 개선점:
 ▶ 6. 역량 점수
-- 개념 이해도: X점 / 10점 | 이유: (한 문장)
-- 풀이 전개력: X점 / 10점 | 이유: (한 문장)
-- 문제 해석력: X점 / 10점 | 이유: (한 문장)
+- 개념 이해도: X점 / 10점 | 이유:
+- 풀이 전개력: X점 / 10점 | 이유:
+- 문제 해석력: X점 / 10점 | 이유:
 - 합계: XX점 / 30점`;
 
   const FMT_TOTAL=`
@@ -506,7 +501,7 @@ O
 
   const setMsg=(msg)=>{const el=document.getElementById('loadingMsg');if(el)el.textContent=msg;};
 
-  // 비스트리밍 OCR 호출
+  // 비스트리밍 OCR 호출 (재시도 포함)
   const callOCR=async(parts,attempt=0)=>{
     const res=await fetch('/api/proxy',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -514,10 +509,9 @@ O
     });
     const resText=await res.text();
     if(!res.ok){
-      let errMsg='OCR 오류', retryAfter=0;
+      let errMsg='OCR 오류',retryAfter=0;
       try{const j=JSON.parse(resText);errMsg=j.error?.message||errMsg;retryAfter=j.retryAfter||0;}
-      catch{errMsg=resText.slice(0,200)||errMsg;}
-      // 429면 클라이언트에서 대기 후 재시도 (최대 2회)
+      catch{errMsg=resText.slice(0,200);}
       if(res.status===429&&attempt<2&&retryAfter>0){
         setMsg(`⏳ quota 초과, ${retryAfter}초 후 재시도...`);
         await new Promise(r=>setTimeout(r,retryAfter*1000));
@@ -525,16 +519,11 @@ O
       }
       throw new Error(errMsg);
     }
-    try{
-      const data=JSON.parse(resText);
-      return data.content?.map(c=>c.text||'').join('').trim()||'';
-    }catch{
-      console.warn('OCR 응답 파싱 실패, 이미지 직접 사용');
-      return '';
-    }
+    try{const data=JSON.parse(resText);return data.content?.map(c=>c.text||'').join('').trim()||'';}
+    catch{console.warn('OCR 파싱 실패');return'';}
   };
 
-  // 스트리밍 호출 (quota 오류 시 클라이언트에서 대기 후 최대 2회 재시도)
+  // 스트리밍 호출 (재시도 포함)
   const streamCall=async(parts,onChunk,attempt=0)=>{
     const res=await fetch('/api/proxy',{
       method:'POST',headers:{'Content-Type':'application/json'},
@@ -542,9 +531,9 @@ O
     });
     if(!res.ok){
       const errText=await res.text();
-      let errMsg='API 오류', retryAfter=0;
+      let errMsg='API 오류',retryAfter=0;
       try{const j=JSON.parse(errText);errMsg=j.error?.message||errMsg;retryAfter=j.retryAfter||0;}
-      catch{errMsg=errText.slice(0,200)||errMsg;}
+      catch{errMsg=errText.slice(0,200);}
       if(res.status===429&&attempt<2&&retryAfter>0){
         setMsg(`⏳ quota 초과, ${retryAfter}초 후 재시도...`);
         await new Promise(r=>setTimeout(r,retryAfter*1000));
@@ -565,68 +554,66 @@ O
     }
   };
 
-  // OCR 공통
+  // OCR 공통 함수
   const runOCR=async(files,existingText,label,prompt)=>{
     if(existingText)return existingText;
     if(!files.length)return'';
     try{
-      const p=[];
-      p.push({type:'text',text:prompt});
+      const p=[{type:'text',text:prompt}];
       files.forEach((file,ii)=>{
-        p.push({type:'text',text:`${label}파일${ii+1}: ${file.name}`});
-        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
-        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
+        p.push({type:'text',text:`${label}${ii+1}`});
+        if(file.isPdf)p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
       });
       return await callOCR(p);
     }catch(e){console.warn(`${label} OCR 실패:`,e.message);return'';}
   };
 
-  // parts 생성
+  // parts 생성 함수
   const makeParts=(startNum,endNum)=>{
     const p=[];
-    const rangeLabel=`${startNum}번~${endNum}번 문제`;
+    const rangeLabel=`${startNum}번~${endNum}번`;
 
+    // 해설: OCR 텍스트 + 원본 이미지 함께 (텍스트 오류 시 이미지 우선)
     if(ocrText){
-      // OCR 텍스트 + 원본 이미지/PDF 함께 전달 → AI가 텍스트 오류 시 이미지 직접 확인 가능
-      p.push({type:'text',text:`[해설 텍스트 — OCR 추출]\n아래 텍스트와 원본 이미지를 함께 참고하세요. 텍스트의 수식이 이미지와 다르면 이미지를 우선으로 사용하세요.\n풀이법(▶3) 작성: 해당 문제의 [문제N] 섹션을 찾아 수식·수치를 한 글자도 바꾸지 말고 그대로 옮겨 쓰세요.\n\n${ocrText}`});
-      // 원본도 함께 전달
+      p.push({type:'text',text:`[해설 텍스트]\n아래에서 ${rangeLabel} 문제의 [문제N] 섹션을 찾아 풀이 단계를 수식·수치 한 글자도 바꾸지 말고 그대로 복사하세요. 텍스트와 이미지가 다르면 이미지 우선.\n\n${ocrText}`});
       if(aT)p.push({type:'text',text:aT});
       bulkStore.a.forEach((file,ii)=>{
-        p.push({type:'text',text:`해설원본${ii+1}: ${file.name}`});
-        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
-        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
+        p.push({type:'text',text:`해설이미지${ii+1}`});
+        if(file.isPdf)p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
       });
     } else {
-      p.push({type:'text',text:`[해설] 아래 이미지/텍스트에서 ${rangeLabel}의 풀이를 읽고, 수식·수치를 한 글자도 바꾸지 말고 그대로 단계별로 옮겨 쓰세요.`});
+      p.push({type:'text',text:`[해설] ${rangeLabel} 풀이를 수식·수치 그대로 읽어 사용하세요.`});
       if(aT)p.push({type:'text',text:aT});
       bulkStore.a.forEach((file,ii)=>{
-        p.push({type:'text',text:`해설파일${ii+1}: ${file.name}`});
-        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
-        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
+        p.push({type:'text',text:`해설이미지${ii+1}`});
+        if(file.isPdf)p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
       });
     }
 
-    if(ocrQText){
-      p.push({type:'text',text:`[문제 텍스트]\n${ocrQText}`});
-    } else {
+    // 문제
+    if(ocrQText)p.push({type:'text',text:`[문제 텍스트]\n${ocrQText}`});
+    else{
       p.push({type:'text',text:`[문제] ${rangeLabel}`});
       if(qT)p.push({type:'text',text:qT});
       bulkStore.q.forEach((file,ii)=>{
-        p.push({type:'text',text:`문제파일${ii+1}: ${file.name}`});
-        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
-        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
+        p.push({type:'text',text:`문제이미지${ii+1}`});
+        if(file.isPdf)p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
       });
     }
 
-    if(ocrSText){
-      p.push({type:'text',text:`[학생풀이 텍스트]\n아래에서 각 문제의 학생 풀이를 찾아 그대로 옮겨 쓰세요.\n\n${ocrSText}`});
-    } else {
+    // 학생풀이
+    if(ocrSText)p.push({type:'text',text:`[학생풀이 텍스트]\n아래에서 ${rangeLabel} 문제의 학생 풀이를 찾아 식·계산·답을 그대로 정리하세요.\n\n${ocrSText}`});
+    else{
       p.push({type:'text',text:`[학생풀이] ${rangeLabel}`});
       if(sT)p.push({type:'text',text:sT});
       bulkStore.s.forEach((file,ii)=>{
-        p.push({type:'text',text:`학생풀이파일${ii+1}: ${file.name}`});
-        if(file.isPdf){p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});}
-        else{p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});}
+        p.push({type:'text',text:`학생풀이이미지${ii+1}`});
+        if(file.isPdf)p.push({type:'document',source:{type:'base64',media_type:'application/pdf',data:file.base64}});
+        else p.push({type:'image',source:{type:'base64',media_type:file.mediaType,data:file.base64}});
       });
     }
 
@@ -637,50 +624,52 @@ O
     const corrText=corrSlice.length>0?'\n[정답]\n'+corrSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'';
     const ansText=ansSlice.length>0?'\n[학생선택]\n'+ansSlice.map(([n,v])=>`${n}번: ${v}`).join('\n'):'\n[학생선택: 이미지에서 판단]';
 
-    const fmt=`${rangeLabel} 분석.${range?' 범위:'+range:''}${corrText}${ansText}
+    p.push({type:'text',text:`${rangeLabel} 분석.${range?' 범위:'+range:''}${corrText}${ansText}
 =====로 시작. 앞 설명 금지. 평가불가 금지.${corrText?' 정답목록 우선.':''}
 반복:${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
-완료후:${FMT_TOTAL}`;
-    p.push({type:'text',text:fmt});
+완료후:${FMT_TOTAL}`});
     return p;
   };
 
-  // OCR 순차 실행 (병렬 시 quota 초과 방지)
-  setMsg('🔍 해설 텍스트 변환 중... (1/3)');
-  const ocrText = await runOCR(bulkStore.a,aT,'해설',`물리1 해설지입니다. 각 문제의 정답과 풀이 과정을 아래 형식으로 정확히 추출하세요.
+  // OCR 순차 실행 (quota 분산) + 분석 전체를 try-catch로 보호
+  let ocrText='', ocrQText='', ocrSText='';
+  try{
+    setMsg('🔍 해설 텍스트 변환 중... (1/3)');
+    ocrText=await runOCR(bulkStore.a,aT,'해설',
+`물리1 해설지입니다. 각 문제의 정답과 풀이를 아래 형식으로 추출하세요.
 
-출력 형식:
+형식 (예시):
 [문제1]
 정답: ①
-풀이 단계:
-1. (해설 첫째 줄 그대로)
-2. (해설 둘째 줄 그대로, 예: ΣM_A = (mg × 2L) - (T × L) = 0)
-3. (해설 셋째 줄 그대로, 예: T = 2mg)
-4. (결론)
+풀이:
+1. ΣF = 0 적용, T = mg
+2. Στ = 0, F × 2L = mg × L
+3. F = mg/2
 
 [문제2]
 정답: ③
-풀이 단계:
-1. ...
+풀이:
+1. (실제 해설 내용)
+2. (실제 해설 내용)
 
-수식 읽기 주의사항 (가장 중요):
-- 분수: 분자와 분모를 정확히 구분 (예: 4L/13 ≠ 13L/4, 29mg/13 ≠ 13/29mg)
-- 계수: mg 앞 숫자 정확히 (예: 2mg ≠ mg, 3mg ≠ 2mg)
-- 첨자: T'과 T'', d1과 d2, M_A와 M_B 각각 구분
-- 괄호: (mg × 3L)에서 × 앞뒤 값 정확히
-- 정답 원문자(①②③④⑤) 반드시 포함
-- 각 문제를 [문제N] 형식으로 구분
+규칙:
+- 각 문제를 [문제N]으로 구분
+- 수식·숫자·기호를 이미지에 있는 그대로 옮길 것
+- 분수(4L/13 ≠ 13L/4), 계수(2mg ≠ mg), 첨자(T'≠T'', d1≠d2) 정확히
+- 정답 원문자(①②③④⑤) 포함
 - 해설에 없는 내용 추가 금지
-- 각 문제 한 번만 출력 (반복 금지)`);
+- 각 문제 한 번만 출력`);
 
-  if(bulkStore.q.length||qT){
-    await new Promise(r=>setTimeout(r,3000)); // quota 회복 대기
-    setMsg('🔍 문제 텍스트 변환 중... (2/3)');
-  }
-  const ocrQText = await runOCR(bulkStore.q,qT,'문제',`물리1 문제지입니다. 각 문제를 아래 형식으로 변환하세요.
+    if(bulkStore.q.length||qT){
+      await new Promise(r=>setTimeout(r,3000));
+      setMsg('🔍 문제 텍스트 변환 중... (2/3)');
+    }
+    ocrQText=await runOCR(bulkStore.q,qT,'문제',
+`물리1 문제지입니다. 각 문제를 아래 형식으로 변환하세요.
 
 [문제1]
-문제 내용: (조건 그대로)
+조건: (문제 상황·수치 그대로)
+구하는 것: (문제가 요구하는 것)
 보기: ① ... ② ... ③ ... ④ ... ⑤ ...
 
 [문제2]
@@ -688,24 +677,31 @@ O
 
 규칙: 조건·수치·단위 그대로. 보기 선지 포함.`);
 
-  if(bulkStore.s.length||sT){
-    await new Promise(r=>setTimeout(r,3000)); // quota 회복 대기
-    setMsg('🔍 학생 풀이 변환 중... (3/3)');
-  }
-  const ocrSText = await runOCR(bulkStore.s,sT,'학생풀이',`학생 손글씨 풀이지입니다. 이미지 전체를 위에서 아래로 스캔해 모든 풀이를 추출하세요.
+    if(bulkStore.s.length||sT){
+      await new Promise(r=>setTimeout(r,3000));
+      setMsg('🔍 학생 풀이 변환 중... (3/3)');
+    }
+    ocrSText=await runOCR(bulkStore.s,sT,'학생풀이',
+`학생 손글씨 풀이지입니다. 이미지 전체를 위→아래, 좌→우로 스캔해 모든 풀이를 추출하세요.
 
+형식:
 [문제1]
-- 세운 식: (학생 식 그대로)
-- 계산 과정: (학생 계산 그대로)
-- 최종 답: (학생 답)
+- 식: N=F+30, F×d=50N×9d
+- 계산: F×d=450d, F=450N
+- 답: 450N
 
 [문제2]
-...
+- 식: ΣM_A=0, T×L=mg×2L
+- 계산: T=2mg
+- 답: 2mg
 
-규칙: 이미지 전체 빠짐없이 스캔. 문제번호는 이미지에서 읽거나 순서대로 1,2,3 매기기. 흘려쓴 글씨도 해독. 진짜 없을 때만 (풀이 없음). 읽기 어려우면 (불명확). 수정 금지.`);
+규칙:
+- 이미지 전체 빠짐없이 스캔. 문제번호는 이미지에서 읽거나 순서대로 1,2,3...
+- 흘려쓴 글씨·작은 글씨도 최대한 해독
+- 진짜 아무것도 없을 때만 (풀이 없음). 읽기 어려우면 (불명확)
+- 학생의 틀린 식도 그대로. 수정 금지
+- 각 문제 한 번만 출력`);
 
-  try{
-    // 1~4번
     setMsg('⚡ 1~4번 분석 중...');
     rc.innerHTML='';
     let fullText='';
@@ -715,8 +711,7 @@ O
     const streamEl=document.getElementById('streamText');
     await streamCall(makeParts(1,4),(chunk)=>{fullText+=chunk;streamEl.textContent=fullText;});
 
-    // 5~8번
-    await new Promise(r=>setTimeout(r,4000)); // quota 회복 대기
+    await new Promise(r=>setTimeout(r,4000));
     setMsg('⚡ 5~8번 분석 중...');
     let fullText2='';
     const sc2=document.createElement('div');sc2.className='prob-card';
@@ -725,18 +720,25 @@ O
     const streamEl2=document.getElementById('streamText2');
     await streamCall(makeParts(5,8),(chunk)=>{fullText2+=chunk;streamEl2.textContent=fullText2;});
 
-    // 총평
-    await new Promise(r=>setTimeout(r,4000)); // quota 회복 대기
+    await new Promise(r=>setTimeout(r,4000));
     setMsg('⚡ 총평 작성 중...');
-    const totalParts=[{type:'text',text:`아래는 8개 문제 피드백 결과입니다. 총평만 작성하세요.\n\n[1~4번]\n${fullText}\n\n[5~8번]\n${fullText2}\n\n형식:${FMT_TOTAL}\n총평만 출력. 앞 설명 금지.`}];
     let totalText='';
-    await streamCall(totalParts,(chunk)=>{totalText+=chunk;});
+    await streamCall([{type:'text',text:`아래는 8개 문제 피드백 결과입니다. 총평만 작성하세요.\n\n[1~4번]\n${fullText}\n\n[5~8번]\n${fullText2}\n\n형식:${FMT_TOTAL}\n총평만 출력. 앞 설명 금지.`}],(chunk)=>{totalText+=chunk;});
 
     rc.innerHTML='';
-    renderResult(fullText+'\n'+fullText2+'\n'+totalText,rc);
+    // 1~4번, 5~8번에서 혹시 총평이 붙어 나오면 제거 (총평은 별도 호출로 생성)
+    const stripTotal=(t)=>{const idx=t.indexOf('\n=====\n총평');return idx>0?t.slice(0,idx):t;};
+    if(!fullText&&!fullText2){
+      throw new Error('분석 결과가 없습니다. 입력 이미지를 확인해주세요.');
+    }
+    renderResult(stripTotal(fullText)+'\n'+stripTotal(fullText2)+'\n'+totalText,rc);
 
   }catch(e){
     rc.innerHTML=`<div class="error-box">⚠️ 오류: ${e.message}<br><small>Google AI Studio에서 발급한 API Key(AIza...)를 확인해주세요.</small></div><button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
+  }finally{
+    // 로딩 화면이 남아있으면 제거 (무한 로딩 방지)
+    const lw=rc.querySelector('.loading-wrap');
+    if(lw)lw.remove();
   }
 }
 let lastRawText='';
@@ -940,14 +942,18 @@ async function downloadPDF(){
       });
       wrap.appendChild(cl);
       document.body.appendChild(wrap);
-      await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-      await new Promise(r=>setTimeout(r,80));
-      const canvas=await html2canvas(wrap,{
-        scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,
-        width:RENDER_W,windowWidth:RENDER_W,
-      });
-      document.body.removeChild(wrap);
-      return canvas;
+      try{
+        await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+        await new Promise(r=>setTimeout(r,80));
+        const canvas=await html2canvas(wrap,{
+          scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,
+          width:RENDER_W,windowWidth:RENDER_W,
+        });
+        return canvas;
+      }finally{
+        // 오류 발생해도 반드시 DOM에서 제거
+        if(document.body.contains(wrap))document.body.removeChild(wrap);
+      }
     };
 
     // canvas → mm 변환: 렌더링 너비(RENDER_W px) = cellW mm
@@ -1016,11 +1022,18 @@ async function downloadPDF(){
         cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
         wrap.appendChild(cl);
         document.body.appendChild(wrap);
-        await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-        await new Promise(r=>setTimeout(r,80));
-        const canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:TOTAL_RENDER_W,windowWidth:TOTAL_RENDER_W});
-        document.body.removeChild(wrap);
-        const fw=PW-MG*2,fh=canvas.height/canvas.width*fw;
+        let canvas;
+        try{
+          await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
+          await new Promise(r=>setTimeout(r,80));
+          canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:TOTAL_RENDER_W,windowWidth:TOTAL_RENDER_W});
+        }finally{
+          if(document.body.contains(wrap))document.body.removeChild(wrap);
+        }
+        const fw=PW-MG*2;
+        let fh=canvas.height/canvas.width*fw;
+        // 총평 카드도 페이지 높이 초과 시 축소
+        if(fh>PH-MG*2){const r=(PH-MG*2)/fh;fh=PH-MG*2;}
         if(ty+fh>PH-MG){pdf.addPage();pageNum++;ty=MG;}
         pdf.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',MG,ty,fw,fh);
         ty+=fh+GAP;
