@@ -923,6 +923,258 @@ ${FMT_TOTAL}`});
   }
 }
 
+function correctPhysicsText(text){
+  const corrections=[
+    [/출퇴/g,'출제'],[/질감/g,'질량'],[/무계\b/g,'무게'],[/속도\b/g,'속력'],
+    [/떨어지지\s*않다/g,'떨어지지 않다'],[/떨어지지않다/g,'떨어지지 않다'],
+    [/떨어지지\s*않는/g,'떨어지지 않는'],[/막돼/g,'막대'],
+    [/수직\s*횡력/g,'수직항력'],[/수직횡력/g,'수직항력'],
+    [/관성\s*의\s*법착/g,'관성의 법칙'],[/작용\s*반작용/g,'작용 반작용'],
+    [/운동\s*에네지/g,'운동 에너지'],[/운동에네지/g,'운동 에너지'],
+    [/퍼텐\s*셜/g,'퍼텐셜'],[/역학적\s*에네지/g,'역학적 에너지'],
+    [/마철/g,'마찰'],[/마찰력\s*계수/g,'마찰 계수'],[/충격\s*량/g,'충격량'],
+    [/운동\s*량/g,'운동량'],[/돌림\s*힘/g,'돌림힘'],[/도르\s*래/g,'도르래'],
+    [/탄성\s*력/g,'탄성력'],[/합력\s*/g,'합력'],[/알짜\s*힘/g,'알짜힘'],
+  ];
+  let result=text;
+  corrections.forEach(([pat,rep])=>{result=result.replace(pat,rep);});
+  return result;
+}
+function renderResult(text,container){
+  lastRawText=text;
+  const corrected=correctPhysicsText(text);
+  container.innerHTML='';
+
+  // preamble 제거: 첫 ===== 이전 텍스트 버림
+  const firstSep=corrected.indexOf('=====');
+  const cleanText=firstSep>0?corrected.slice(firstSep):corrected;
+
+  const lines=cleanText.split('\n');
+  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+
+  let html='';
+  let inCard=false,inScoreGrid=false,inTable=false,inFeedback=false,inStudent=false;
+  let curSection='';
+
+  const closeScoreGrid=()=>{if(inScoreGrid){html+=`</div>`;inScoreGrid=false;}};
+  const closeTable=()=>{if(inTable){html+=`</tbody></table></div>`;inTable=false;}};
+  const closeFeedback=()=>{if(inFeedback){html+=`</div>`;inFeedback=false;}};
+  const closeStudent=()=>{if(inStudent){html+=`</div>`;inStudent=false;}};
+  const closeCard=()=>{
+    closeScoreGrid();closeTable();closeFeedback();closeStudent();
+    if(inCard){html+=`</div></div>`;inCard=false;}
+    curSection='';
+  };
+
+  const openCard=(title,isSummary)=>{
+    closeCard();
+    if(isSummary){
+      html+=`<div class="total-card">`;
+      html+=`<div class="total-card-header">📊 ${esc(title)}</div>`;
+    } else {
+      // 문제 번호 추출
+      const numM=title.match(/(\d+)/);
+      const num=numM?numM[1]:'';
+      const ox=''; // O/X는 ▶2 섹션에서
+      html+=`<div class="prob-card">`;
+      html+=`<div class="prob-card-header"><span style="font-size:13px;font-weight:700">문제 ${num}번 피드백</span></div>`;
+    }
+    html+=`<div style="padding:16px 20px 20px">`;
+    inCard=true;
+  };
+
+  for(let i=0;i<lines.length;i++){
+    const trimmed=lines[i].trim();
+
+    // ===== 구분선 → 새 카드
+    if(/^={4,}/.test(trimmed)){
+      const next=(lines[i+1]||'').trim();
+      if(next&&!/^={4,}/.test(next)){
+        i++;
+        openCard(next,next==='총평'||next.includes('총평'));
+        if((lines[i+1]||'').trim().match(/^={4,}/))i++;
+      }
+      continue;
+    }
+
+    if(!inCard){
+      html+=`<div class="prob-card"><div style="padding:16px 20px 20px">`;
+      inCard=true;
+    }
+
+    // ▶ 섹션 헤더
+    if(/^▶/.test(trimmed)){
+      closeScoreGrid();closeTable();closeFeedback();closeStudent();
+      const label=trimmed.replace(/^▶\s*\d+\.\s*/,'').replace(/^▶\s*/,'');
+      curSection=label;
+
+      // 섹션별 배지 색상
+      let badgeColor='var(--accent)';
+      let badgeBg='var(--accent-light)';
+      if(label.includes('정오답')){badgeColor='var(--text2)';badgeBg='var(--surface2)';}
+      else if(label.includes('피드백')){badgeColor='#0369a1';badgeBg='#e0f2fe';}
+      else if(label.includes('역량')||label.includes('점수')){badgeColor='var(--green)';badgeBg='#dcfce7';}
+      else if(label.includes('학생')){badgeColor='var(--yellow)';badgeBg='#fef9c3';}
+
+      html+=`<div class="section-label"><span class="section-label-bar" style="background:${badgeColor}"></span><span style="color:${badgeColor}">${esc(label)}</span></div>`;
+      continue;
+    }
+
+    // 풀이 단계 (N단계:)
+    if(/^\d+단계[:\s]/.test(trimmed)){
+      closeFeedback();closeStudent();
+      const nm=trimmed.match(/^(\d+)단계[:\s]+(.*)/);
+      if(nm){
+        html+=`<div class="step-row"><span class="step-num">${nm[1]}</span><span class="step-text">${esc(nm[2])}</span></div>`;
+        continue;
+      }
+    }
+
+    // - 항목 처리
+    if(/^-\s+/.test(trimmed)){
+      // 역량 점수
+      const scoreM=trimmed.match(/^-\s+(개념 이해도|풀이 전개력|문제 해석력):\s*(\d+)점\s*\/\s*10점(?:\s*\|\s*이유:\s*(.*))?/);
+      const totalM=trimmed.match(/^-\s+합계:\s*(\d+)점\s*\/\s*30점/);
+
+      if(scoreM){
+        closeFeedback();closeStudent();
+        const label=scoreM[1],score=parseInt(scoreM[2]),reason=scoreM[3]||'';
+        const isPerfect=score===10;
+        const col=isPerfect?'var(--green)':score>=8?'var(--accent)':score>=6?'var(--yellow)':'var(--red)';
+        if(label==='개념 이해도'){
+          closeScoreGrid();
+          html+=`<div class="score-grid">`;
+          inScoreGrid=true;
+        }
+        html+=`<div class="score-cell">`;
+        html+=`<div class="score-cell-label">${esc(label)}</div>`;
+        html+=`<div class="score-cell-val" style="color:${col}">${score}</div>`;
+        html+=`<div class="score-cell-max">/ 10점</div>`;
+        if(reason&&reason!=='만점'){
+          html+=`<div class="score-cell-reason">${esc(reason)}</div>`;
+        }
+        html+=`</div>`;
+        continue;
+      }
+
+      if(totalM){
+        closeScoreGrid();
+        const total=parseInt(totalM[1]);
+        const totalCol=total>=25?'var(--green)':total>=18?'var(--accent)':total>=12?'var(--yellow)':'var(--red)';
+        html+=`<div class="score-total-row">`;
+        html+=`<span style="font-size:12px;color:var(--text2);font-weight:600">총점</span>`;
+        html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:${totalCol}">${total}</span>`;
+        html+=`<span style="font-size:12px;color:var(--text3)">/ 30점</span>`;
+        html+=`</div>`;
+        continue;
+      }
+
+      // 피드백 섹션 항목
+      if(curSection.includes('피드백')){
+        closeFeedback();closeStudent();
+        if(!inFeedback){
+          html+=`<div class="feedback-box">`;
+          inFeedback=true;
+        }
+        const colon=trimmed.indexOf(':');
+        if(colon>0){
+          const fbLabel=trimmed.slice(2,colon+1);
+          const fbVal=trimmed.slice(colon+1).trim();
+          html+=`<div class="fb-row"><span class="fb-label">${esc(fbLabel)}</span> ${esc(fbVal)}</div>`;
+        } else {
+          html+=`<div class="fb-row">${esc(trimmed)}</div>`;
+        }
+        continue;
+      }
+
+      // 학생 풀이 정리 항목
+      if(curSection.includes('학생')){
+        closeFeedback();
+        if(!inStudent){
+          html+=`<div class="student-box">`;
+          inStudent=true;
+        }
+        const colon=trimmed.indexOf(':');
+        if(colon>0){
+          const srLabel=trimmed.slice(2,colon+1);
+          const srVal=trimmed.slice(colon+1).trim();
+          html+=`<div class="sr"><span class="sr-label">${esc(srLabel)}</span> ${esc(srVal)}</div>`;
+        } else {
+          html+=`<div class="sr">${esc(trimmed)}</div>`;
+        }
+        continue;
+      }
+
+      // 정답/정오답
+      closeScoreGrid();closeFeedback();closeStudent();
+      html+=`<div class="bullet-row">${esc(trimmed)}</div>`;
+      continue;
+    }
+
+    // 파이프 표 (총평 점수표)
+    if(/^\|/.test(trimmed)){
+      if(/^\|[-| ]+\|$/.test(trimmed))continue;
+      const cells=trimmed.split('|').map(c=>c.trim()).filter(c=>c);
+      if(!cells.length)continue;
+      closeFeedback();closeStudent();closeScoreGrid();
+
+      const isHeader=cells.some(c=>['문제','정오답','개념','풀이','해석력','합계','이해도','전개력'].includes(c));
+      if(isHeader&&!inTable){
+        html+=`<div style="overflow-x:auto;margin:8px 0"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>`;
+        cells.forEach(c=>{html+=`<th style="background:var(--surface2);color:var(--text2);padding:9px 12px;text-align:center;border-bottom:2px solid var(--border);font-weight:700;white-space:nowrap">${esc(c)}</th>`;});
+        html+=`</tr></thead><tbody>`;
+        inTable=true;
+        continue;
+      }
+      if(inTable){
+        const isAvg=cells[0]==='평균'||cells[0].includes('평균');
+        html+=`<tr style="${isAvg?'background:var(--surface2);font-weight:700':''}">`;
+        cells.forEach(c=>{
+          const isO=c==='O',isX=c==='X';
+          const style=isO?'color:var(--green);font-weight:700':isX?'color:var(--red);font-weight:700':'';
+          html+=`<td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border);${style}">${isO?'✅':isX?'❌':esc(c)}</td>`;
+        });
+        html+=`</tr>`;
+        continue;
+      }
+    }
+
+    if(inTable&&!/^\|/.test(trimmed)){closeTable();}
+
+    // 빈 줄
+    if(!trimmed){
+      closeFeedback();closeStudent();
+      html+=`<div style="height:5px"></div>`;
+      continue;
+    }
+
+    // 정답/정오답 단독 값 (▶1, ▶2 섹션의 값)
+    if(curSection.includes('정답')&&!curSection.includes('정오답')&&/^[①②③④⑤]/.test(trimmed)){
+      html+=`<div style="font-size:20px;font-weight:700;color:var(--accent);padding:4px 0 2px">${esc(trimmed)}</div>`;
+      continue;
+    }
+    if(curSection.includes('정오답')){
+      const isO=trimmed==='O'||trimmed==='o';
+      const isX=trimmed==='X'||trimmed==='x';
+      if(isO||isX){
+        html+=`<div style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;background:${isO?'#dcfce7':'#fee2e2'};margin-top:2px">`;
+        html+=`<span style="font-size:16px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'O':'X'}</span>`;
+        html+=`<span style="font-size:12px;color:${isO?'var(--green)':'var(--red)'}">${isO?'정답':'오답'}</span>`;
+        html+=`</div>`;
+        continue;
+      }
+    }
+
+    // 총평 섹션 텍스트 (강점/보완/학습방향)
+    closeScoreGrid();closeFeedback();closeStudent();
+    html+=`<div style="font-size:13px;color:var(--text);line-height:1.85;padding:2px 0">${esc(trimmed)}</div>`;
+  }
+
+  closeCard();
+  container.innerHTML=html||`<div class="prob-card"><div style="padding:16px 20px;font-size:13px;color:var(--text2)">결과가 없습니다.</div></div>`;
+}
+
+
 async function downloadPDF() {
   const btn = document.getElementById('pdfBtn');
   const rc = document.getElementById('resultContent');
