@@ -805,10 +805,10 @@ async function analyze() {
 - 식: (학생이 쓴 식 그대로)
 - 계산: (학생의 계산 그대로)
 - 그림/도형: (자유물체도, 힘 화살표, 방향 표시 등을 텍스트로 설명. 예: "막대에 F↑, mg↓ 화살표 표시")
-- 수정흔적: (지우고 고친 부분. 예: "수정됨: F=2mg → F=mg/2")
 - 답: (학생의 최종 답)
 
-수식 규칙: LaTeX(\\frac,\\times,\\tau 등) 절대 금지. 분수=분자/분모, 곱셈=×, 그리스문자=τΣμθ 유니코드 직접 사용. 첨자=d_1,T'. 각 문제 한 번만.`}];
+수식 규칙: LaTeX(\\frac,\\times,\\tau 등) 절대 금지. 분수=분자/분모, 곱셈=×, 그리스문자=τΣμθ 유니코드 직접 사용. 첨자=d_1,T'. 각 문제 한 번만.
+지운 내용은 무시하고 최종적으로 남아있는 내용만 읽을 것. (지워짐) 같은 표기 금지.`}];
 
       if (needSolOcr) { combinedParts.push({type:'text',text:'[해설이미지]'}); combinedParts.push(...await filesToParts(store.a)); }
       if (needStuOcr) { combinedParts.push({type:'text',text:'[학생풀이이미지]'}); combinedParts.push(...await filesToParts(store.s)); }
@@ -1135,8 +1135,7 @@ function renderResult(text,container){
       const isX=trimmed==='X'||trimmed==='x';
       if(isO||isX){
         html+=`<div style="display:block;width:fit-content;padding:5px 14px;border-radius:7px;background:${isO?'#dcfce7':'#fee2e2'};margin-top:2px">`;
-        html+=`<span style="font-size:16px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'⭕ 정답':'❌ 오답'}</span>`;
-        html+=`<span style="font-size:12px;color:${isO?'var(--green)':'var(--red)'}">${isO?'정답':'오답'}</span>`;
+        html+=`<span style="font-size:15px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'⭕ 정답':'❌ 오답'}</span>`;
         html+=`</div>`;
         continue;
       }
