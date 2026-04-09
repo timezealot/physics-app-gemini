@@ -717,7 +717,7 @@ function buildParts(prompt, files) {
 async function analyze() {
   if (isAnalyzing) return;
   const apiKey = document.getElementById('apiKey').value.trim();
-  if (!isMock && !apiKey) { alert('API Key를 입력해주세요.\n🧪 목업 모드로 테스트해 볼 수 있습니다.'); return; }
+  if (!isMock && !apiKey) { alert('API Key를 입력해주세요.\n🧪 목업 모드로 테스트할 수 있습니다.'); return; }
 
   const qT = document.getElementById('text-q').value.trim();
   const aT = document.getElementById('text-a').value.trim();
@@ -736,125 +736,132 @@ async function analyze() {
   document.getElementById('analyzeWrap').style.display = 'none';
   document.getElementById('resultView').classList.add('visible');
   const rc = document.getElementById('resultContent');
-  rc.innerHTML = `<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">${isMock?'🧪 샘플 결과 생성 중...':'분석을 시작합니다...'}<br><small style="color:var(--text3)">${isMock?'실제 API 호출 없음':'해설 이미지가 많으면 시간이 걸릴 수 있습니다'}</small></div></div>`;
+  rc.innerHTML = `<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">${isMock?'🧪 샘플 결과 생성 중...':'분석을 시작합니다...'}<br><small style="color:var(--text3)">${isMock?'실제 API 호출 없음':'이미지를 읽고 피드백을 작성합니다'}</small></div></div>`;
 
   const setMsg = msg => { const el = document.getElementById('loadingMsg'); if (el) el.innerHTML = msg; };
+
+  // 이미지를 1MB 이하로 압축 (Vercel 4.5MB 제한 대응)
+  const compressImage = (file) => new Promise(resolve => {
+    if (file.isPdf) { resolve(file); return; }
+    const img = new Image();
+    img.onload = () => {
+      const MAX = 1200; // 최대 1200px
+      let w = img.width, h = img.height;
+      if (w > MAX || h > MAX) {
+        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
+        else { w = Math.round(w * MAX / h); h = MAX; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, w, h);
+      const compressed = canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+      resolve({...file, base64: compressed, mediaType: 'image/jpeg'});
+    };
+    img.src = `data:${file.mediaType};base64,${file.base64}`;
+  });
+
+  // 파일 → Gemini parts 변환 (압축 포함)
+  const filesToParts = async (files, label) => {
+    const parts = [];
+    for (let i = 0; i < files.length; i++) {
+      const f = await compressImage(files[i]);
+      parts.push({type:'text', text:`${label}${files.length>1?` ${i+1}`:''}`});
+      if (f.isPdf) parts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
+      else parts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
+    }
+    return parts;
+  };
+
+  // 단일 문자 파일 → parts (OCR용, 1장씩)
+  const fileToOcrParts = async (file, prompt) => {
+    const f = await compressImage(file);
+    const p = [{type:'text', text:prompt}];
+    if (f.isPdf) p.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
+    else p.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
+    return p;
+  };
 
   try {
     if (isMock) { await sleep(900); renderResult(MOCK_RESPONSE, rc); return; }
 
-    // ── Step 1: OCR (해설 + 학생 풀이를 단일 호출로 합침 — quota 최소화) ──
+    // ── STEP 1: 해설 OCR (파일당 1회, 순차) ──
+    // 텍스트가 있으면 OCR 생략
     let solutionOcrText = aT;
-    let studentOcrText = sT;
+    if (!solutionOcrText && store.a.length) {
+      const ocrResults = [];
+      for (let i = 0; i < store.a.length; i++) {
+        setMsg(`🔍 해설 이미지 읽는 중... (${i+1}/${store.a.length})<br><small style="color:var(--text3)">수식과 정답을 정확히 추출합니다</small>`);
+        const ocrPrompt = `물리1 해설지입니다. 이미지에 있는 내용을 아래 형식으로 정확하게 추출하세요.
 
-    const needSolutionOcr = !solutionOcrText && store.a.length > 0;
-    const needStudentOcr  = !studentOcrText  && store.s.length > 0;
-
-    if (needSolutionOcr || needStudentOcr) {
-      setMsg('🔍 이미지 분석 중... (1/2)<br><small style="color:var(--text3)">해설과 학생 풀이를 한 번에 읽습니다</small>');
-
-      // 해설과 학생 풀이를 하나의 프롬프트로 합쳐서 단일 API 호출
-      const combinedPrompt = `물리1 이미지 분석 전문가. 두 종류의 이미지를 순서대로 분석합니다.
-
-=== 해설 분석 ===
-[해설 이미지]에서 각 문제의 정답과 풀이를 추출하세요.
-
-출력 형식:
-[해설]
-[문제1]
+[문제N]
 정답: ①
 풀이:
-1. (해설 내용 그대로)
+1. (해설 첫째 줄 그대로)
 2. (수식 그대로, 예: ΣM_A = (mg × 2L) - (T × L) = 0)
-3. (결론)
+3. (결론, 예: T = 2mg)
 
-[문제2]
-...
+규칙: 수식·숫자·기호를 이미지에 있는 그대로 옮길 것. 분수(4L/13), 계수(2mg), 첨자(T', d1) 정확히. 정답 원문자(①②③④⑤) 포함. 추가·변경 금지. 각 문제 한 번만.`;
+        const result = await callProxy({
+          parts: await fileToOcrParts(store.a[i], ocrPrompt),
+          model: MODEL.ocr,
+          setMsgFn: setMsg,
+        });
+        ocrResults.push(result);
+        if (i < store.a.length - 1) await sleep(5000); // 파일 사이 대기
+      }
+      solutionOcrText = ocrResults.join('\n\n');
+    }
 
-=== 학생 풀이 분석 ===
-[학생 풀이 이미지]에서 각 문제의 풀이를 추출하세요.
+    // ── STEP 2: 학생 풀이 OCR (파일당 1회, 순차) ──
+    let studentOcrText = sT;
+    if (!studentOcrText && store.s.length) {
+      if (store.a.length) await sleep(5000); // 해설 OCR 후 대기
+      const ocrResults = [];
+      for (let i = 0; i < store.s.length; i++) {
+        setMsg(`🔍 학생 풀이 읽는 중... (${i+1}/${store.s.length})<br><small style="color:var(--text3)">손글씨를 최대한 정확히 읽습니다</small>`);
+        const ocrPrompt = `학생 손글씨 풀이지입니다. 이미지 전체를 위→아래, 좌→우 순서로 읽어 아래 형식으로 변환하세요.
 
-출력 형식:
-[학생풀이]
-[문제1]
+[문제N]
 - 식: (학생이 쓴 식 그대로)
 - 계산: (학생의 계산 그대로)
 - 답: (학생의 최종 답)
 
-[문제2]
-...
-
-공통 규칙:
-- 수식·숫자·기호를 이미지에 있는 그대로 옮길 것
-- 분수(4L/13≠13L/4), 계수(2mg≠mg), 첨자(T'≠T'') 정확히
-- 각 문제 한 번만 출력
-- 해설 원문자(①②③④⑤) 반드시 포함
-- 학생 풀이: 흘려쓴 글씨도 최대한 해독, 없으면 (풀이 없음)`;
-
-      const combinedParts = [{type:'text', text: combinedPrompt}];
-
-      if (needSolutionOcr) {
-        combinedParts.push({type:'text', text:'[해설 이미지]'});
-        store.a.forEach((f,i) => {
-          combinedParts.push({type:'text', text:`해설${i+1}`});
-          if (f.isPdf) combinedParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-          else combinedParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
+규칙: 흘려쓴 글씨도 최대한 해독. 없으면 (풀이 없음). 읽기 어려우면 (불명확). 수정·해석 금지. 순서대로 번호 부여. 각 문제 한 번만.`;
+        const result = await callProxy({
+          parts: await fileToOcrParts(store.s[i], ocrPrompt),
+          model: MODEL.ocr,
+          setMsgFn: setMsg,
         });
+        ocrResults.push(result);
+        if (i < store.s.length - 1) await sleep(5000);
       }
-      if (needStudentOcr) {
-        combinedParts.push({type:'text', text:'[학생 풀이 이미지]'});
-        store.s.forEach((f,i) => {
-          combinedParts.push({type:'text', text:`학생풀이${i+1}`});
-          if (f.isPdf) combinedParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-          else combinedParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
-        });
-      }
-
-      const combinedResult = await callProxy({
-        parts: combinedParts,
-        model: MODEL.ocr,
-        setMsgFn: setMsg,
-      });
-
-      // 결과 분리: [해설] 블록과 [학생풀이] 블록으로 나눔
-      if (needSolutionOcr) {
-        const solMatch = combinedResult.match(/\[해설\]([\s\S]*?)(?=\[학생풀이\]|$)/);
-        solutionOcrText = solMatch ? solMatch[1].trim() : combinedResult;
-      }
-      if (needStudentOcr) {
-        const stuMatch = combinedResult.match(/\[학생풀이\]([\s\S]*?)$/);
-        studentOcrText = stuMatch ? stuMatch[1].trim() : '';
-      }
+      studentOcrText = ocrResults.join('\n\n');
     }
 
-    // ── Step 3: 분석 (4초 대기 후, 스트리밍) ──
-    await sleep(8000); // quota 회복 — OCR 후 충분히 대기
-    setMsg('⚡ 풀이 분석 중... (2/2)<br><small style="color:var(--text3)">피드백을 작성합니다</small>');
+    // ── STEP 3: 분석 (스트리밍) ──
+    const hasOcr = (store.a.length && !aT) || (store.s.length && !sT);
+    if (hasOcr) await sleep(5000); // OCR 후 대기
 
-    // 분석 파트 구성
+    setMsg('⚡ 피드백 작성 중...<br><small style="color:var(--text3)">해설을 기준으로 학생 풀이를 분석합니다</small>');
+
     const analysisParts = [];
 
-    // 해설 원문
+    // 해설 (OCR 텍스트 + 원본 이미지 모두)
     if (solutionOcrText) {
-      analysisParts.push({type:'text', text:`[해설 원문 — 절대 기준]\n이 텍스트와 원본 이미지를 함께 참고하세요. 텍스트와 이미지가 다르면 이미지 우선.\n수식·수치·기호를 한 글자도 바꾸지 말고 그대로 풀이법에 복사하세요.\n\n${solutionOcrText}`});
+      analysisParts.push({type:'text', text:`[해설 원문 — 절대 기준]\n이미지와 함께 제공됩니다. 텍스트와 이미지가 다르면 이미지 우선.\n수식·수치를 한 글자도 바꾸지 말고 그대로 풀이법에 복사하세요.\n\n${solutionOcrText}`});
     }
-    // 해설 원본 이미지도 함께 전달 (텍스트 오류 보정용)
     if (aT && !store.a.length) {
-      analysisParts.push({type:'text', text:`[해설 텍스트 입력]\n${aT}`});
+      analysisParts.push({type:'text', text:`[해설 텍스트]\n${aT}`});
     }
-    store.a.forEach((f,i) => {
-      analysisParts.push({type:'text', text:`해설원본${i+1}`});
-      if (f.isPdf) analysisParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-      else analysisParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
-    });
+    // 해설 이미지 압축해서 함께 전달 (검증용)
+    const aImgParts = await filesToParts(store.a, '해설이미지');
+    analysisParts.push(...aImgParts);
 
     // 문제
     if (qT) analysisParts.push({type:'text', text:`[문제 텍스트]\n${qT}`});
-    store.q.forEach((f,i) => {
-      analysisParts.push({type:'text', text:`문제이미지${i+1}`});
-      if (f.isPdf) analysisParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-      else analysisParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
-    });
+    const qImgParts = await filesToParts(store.q, '문제이미지');
+    analysisParts.push(...qImgParts);
 
     // 학생 풀이
     if (studentOcrText) {
@@ -863,55 +870,50 @@ async function analyze() {
     if (sT && !store.s.length) {
       analysisParts.push({type:'text', text:`[학생 풀이 텍스트]\n${sT}`});
     }
-    store.s.forEach((f,i) => {
-      analysisParts.push({type:'text', text:`학생풀이이미지${i+1}`});
-      if (f.isPdf) analysisParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-      else analysisParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
-    });
+    const sImgParts = await filesToParts(store.s, '학생풀이이미지');
+    analysisParts.push(...sImgParts);
 
-    // 정답/학생 정답
+    // 정답 입력
     const corrList = Object.entries(correctAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
     const studList = Object.entries(studentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
     let ansText = '';
-    if (corrList.length) ansText += `\n[정답]\n${corrList.map(([n,v])=>`${n}번: ${v}`).join('\n')}`;
-    if (studList.length) ansText += `\n[학생 선택]\n${studList.map(([n,v])=>`${n}번: ${v}`).join('\n')}`;
+    if (corrList.length) ansText += `[정답]\n${corrList.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
+    if (studList.length) ansText += `[학생 선택]\n${studList.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
 
-    const instruction = `${range ? `분석 범위: ${range}\n` : ''}${ansText ? ansText + '\n' : ''}
+    analysisParts.push({type:'text', text:`${range?`분석 범위: ${range}\n`:''}${ansText}
 출력 형식 (=====로 시작, 앞 설명 없이):
 ${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
 
 마지막에 총평:
-${FMT_TOTAL}`;
-    analysisParts.push({type:'text', text:instruction});
+${FMT_TOTAL}`});
 
-    // 스트리밍 분석 실행
+    // 스트리밍
     rc.innerHTML = '';
-    const sc = document.createElement('div');
-    sc.className = 'prob-card';
-    sc.innerHTML = `<div class="prob-card-body"><div class="stream-text" id="streamOut"></div></div>`;
-    rc.appendChild(sc);
+    const sc2 = document.createElement('div');
+    sc2.className = 'prob-card';
+    sc2.innerHTML = `<div class="prob-card-body"><div class="stream-text" id="streamOut"></div></div>`;
+    rc.appendChild(sc2);
     const streamEl = document.getElementById('streamOut');
     let fullText = '';
 
-    const res = await callProxy({
+    const apiRes = await callProxy({
       parts: analysisParts,
       system: SYSTEM_ANALYSIS,
       stream: true,
       model: MODEL.analysis,
       setMsgFn: setMsg,
     });
-    await streamResponse(res, chunk => {
+    await streamResponse(apiRes, chunk => {
       fullText += chunk;
       streamEl.textContent = fullText;
     });
 
     if (!fullText.trim()) throw new Error('분석 결과가 없습니다. 해설 이미지를 확인해주세요.');
-
     rc.innerHTML = '';
     renderResult(fullText, rc);
 
   } catch(e) {
-    rc.innerHTML = `<div class="error-box">⚠️ 오류: ${e.message}<br><small>quota 초과라면 1~2분 후 다시 시도해주세요. 해설 이미지가 선명할수록 정확도가 올라갑니다.</small></div>
+    rc.innerHTML = `<div class="error-box">⚠️ 오류: ${e.message}<br><small>quota 초과라면 1~2분 후 다시 시도해주세요. 이미지가 많으면 한 장씩 나눠 올리면 더 빠릅니다.</small></div>
       <button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
   } finally {
     isAnalyzing = false;
@@ -921,231 +923,6 @@ ${FMT_TOTAL}`;
   }
 }
 
-// ──────────────────────────────────────────────
-// OCR 오인식 교정
-// ──────────────────────────────────────────────
-function correctPhysicsText(text) {
-  const fixes = [
-    [/출퇴/g,'출제'],[/질감/g,'질량'],[/무계\b/g,'무게'],[/막돼/g,'막대'],
-    [/수직\s*횡력/g,'수직항력'],[/마철/g,'마찰'],[/도르\s*래/g,'도르래'],
-    [/운동\s*에네지/g,'운동 에너지'],[/역학적\s*에네지/g,'역학적 에너지'],
-    [/퍼텐\s*셜/g,'퍼텐셜'],[/돌림\s*힘/g,'돌림힘'],[/알짜\s*힘/g,'알짜힘'],
-    [/충격\s*량/g,'충격량'],[/운동\s*량/g,'운동량'],[/탄성\s*력/g,'탄성력'],
-  ];
-  let r = text;
-  fixes.forEach(([p,s]) => { r = r.replace(p,s); });
-  return r;
-}
-
-// ──────────────────────────────────────────────
-// renderResult — 보고서 형식 렌더러
-// ──────────────────────────────────────────────
-function renderResult(text, container) {
-  lastRawText = text;
-  const corrected = correctPhysicsText(text);
-  container.innerHTML = '';
-
-  // preamble 제거
-  const firstSep = corrected.indexOf('=====');
-  const clean = firstSep > 0 ? corrected.slice(firstSep) : corrected;
-  const lines = clean.split('\n');
-
-  const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  let html = '', inCard = false, inScoreGrid = false, inTable = false;
-  let curSection = '';
-  let feedbackItems = [], studentItems = [];
-
-  const flushFeedback = () => {
-    if (feedbackItems.length) {
-      html += `<div class="feedback-box">` + feedbackItems.map(({label,val}) =>
-        `<div class="feedback-row"><span class="feedback-label">${esc(label)}</span> ${esc(val)}</div>`
-      ).join('') + `</div>`;
-      feedbackItems = [];
-    }
-  };
-  const flushStudent = () => {
-    if (studentItems.length) {
-      html += `<div class="student-box">` + studentItems.map(({label,val}) =>
-        `<div class="student-row"><span class="student-label">${esc(label)}</span> ${esc(val)}</div>`
-      ).join('') + `</div>`;
-      studentItems = [];
-    }
-  };
-  const closeScoreGrid = () => { if(inScoreGrid){html+=`</div>`;inScoreGrid=false;} };
-  const closeTable = () => { if(inTable){html+=`</tbody></table></div>`;inTable=false;} };
-  const flushAll = () => { flushFeedback(); flushStudent(); closeScoreGrid(); closeTable(); };
-  const closeCard = () => {
-    flushAll();
-    if(inCard){html+=`</div></div>`;inCard=false;}
-    curSection='';
-  };
-
-  const openCard = (title, isSummary) => {
-    closeCard();
-    if (isSummary) {
-      html += `<div class="total-card"><div class="total-card-header">📊 ${esc(title)}</div><div class="total-card-body">`;
-    } else {
-      const num = (title.match(/(\d+)/)||[])[1]||'';
-      html += `<div class="prob-card"><div class="prob-card-header"><span class="prob-card-title">문제 ${num}번 피드백</span></div><div class="prob-card-body">`;
-    }
-    inCard = true;
-  };
-
-  // 섹션 색상 매핑
-  const SEC_COLORS = {
-    '정답': {bar:'var(--accent)', text:'var(--accent)'},
-    '정오답': {bar:'var(--text2)', text:'var(--text2)'},
-    '풀이법': {bar:'#7c3aed', text:'#7c3aed'},
-    '학생': {bar:'var(--yellow)', text:'var(--yellow)'},
-    '피드백': {bar:'var(--blue)', text:'var(--blue)'},
-    '역량': {bar:'var(--green)', text:'var(--green)'},
-  };
-  const getSecColor = label => {
-    for (const [k,v] of Object.entries(SEC_COLORS)) if(label.includes(k)) return v;
-    return {bar:'var(--accent)', text:'var(--accent)'};
-  };
-
-  for (let i = 0; i < lines.length; i++) {
-    const trimmed = lines[i].trim();
-
-    // ===== 카드 구분
-    if (/^={4,}/.test(trimmed)) {
-      const next = (lines[i+1]||'').trim();
-      if (next && !/^={4,}/.test(next)) {
-        i++;
-        openCard(next, next === '총평' || next.includes('총평'));
-        if ((lines[i+1]||'').trim().match(/^={4,}/)) i++;
-      }
-      continue;
-    }
-
-    if (!inCard) { html+=`<div class="prob-card"><div class="prob-card-body">`; inCard=true; }
-
-    // ▶ 섹션 헤더
-    if (/^▶/.test(trimmed)) {
-      flushAll();
-      const label = trimmed.replace(/^▶\s*\d+\.\s*/,'').replace(/^▶\s*/,'');
-      curSection = label;
-      const col = getSecColor(label);
-      html += `<div class="sec-label" style="color:${col.text}"><span class="sec-bar" style="background:${col.bar}"></span>${esc(label)}</div>`;
-      continue;
-    }
-
-    // 풀이 단계 (N단계:)
-    if (/^\d+단계[:\s]/.test(trimmed)) {
-      flushFeedback(); flushStudent();
-      const nm = trimmed.match(/^(\d+)단계[:\s]+(.*)/);
-      if (nm) { html += `<div class="step-row"><span class="step-num">${nm[1]}</span><span class="step-text">${esc(nm[2])}</span></div>`; continue; }
-    }
-
-    // - 항목
-    if (/^-\s+/.test(trimmed)) {
-      const scoreM = trimmed.match(/^-\s+(개념 이해도|풀이 전개력|문제 해석력):\s*(\d+)점\s*\/\s*10점(?:\s*\|\s*이유:\s*(.*))?/);
-      const totalM = trimmed.match(/^-\s+합계:\s*(\d+)점\s*\/\s*30점/);
-
-      if (scoreM) {
-        flushFeedback(); flushStudent();
-        const [,label,scoreStr,reason] = scoreM;
-        const score = parseInt(scoreStr);
-        const col = score===10?'var(--green)':score>=8?'var(--accent)':score>=6?'var(--yellow)':'var(--red)';
-        if (label==='개념 이해도') { closeScoreGrid(); html+=`<div class="score-grid">`; inScoreGrid=true; }
-        html += `<div class="score-cell"><div class="score-cell-label">${esc(label)}</div>
-          <div class="score-cell-val" style="color:${col}">${score}</div>
-          <div class="score-cell-max">/ 10점</div>
-          ${reason&&reason!=='만점'?`<div class="score-cell-reason">${esc(reason)}</div>`:''}
-          </div>`;
-        continue;
-      }
-
-      if (totalM) {
-        closeScoreGrid();
-        const total = parseInt(totalM[1]);
-        const col = total>=25?'var(--green)':total>=18?'var(--accent)':total>=12?'var(--yellow)':'var(--red)';
-        html += `<div class="score-total"><span class="score-total-label">총점</span>
-          <span class="score-total-val" style="color:${col}">${total}</span>
-          <span class="score-total-max">/ 30점</span></div>`;
-        continue;
-      }
-
-      // 피드백 항목
-      if (curSection.includes('피드백')) {
-        flushStudent();
-        const colon = trimmed.indexOf(':');
-        if (colon > 2) feedbackItems.push({label: trimmed.slice(2,colon+1), val: trimmed.slice(colon+1).trim()});
-        else feedbackItems.push({label:'', val:trimmed.slice(2)});
-        continue;
-      }
-
-      // 학생 풀이 항목
-      if (curSection.includes('학생')) {
-        flushFeedback();
-        const colon = trimmed.indexOf(':');
-        if (colon > 2) studentItems.push({label: trimmed.slice(2,colon+1), val: trimmed.slice(colon+1).trim()});
-        else studentItems.push({label:'', val:trimmed.slice(2)});
-        continue;
-      }
-
-      flushFeedback(); flushStudent();
-      html += `<div class="bullet-row">${esc(trimmed)}</div>`;
-      continue;
-    }
-
-    // 파이프 표 (총평 점수표)
-    if (/^\|/.test(trimmed)) {
-      if (/^\|[-| ]+\|$/.test(trimmed)) continue;
-      const cells = trimmed.split('|').map(c=>c.trim()).filter(c=>c);
-      if (!cells.length) continue;
-      flushAll();
-
-      const isHeader = cells.some(c=>['문제','정오답','개념','풀이','해석력','합계','이해도','전개력'].includes(c));
-      if (isHeader && !inTable) {
-        html += `<div class="total-table-wrap"><table class="total-table"><thead><tr>`;
-        cells.forEach(c => { html += `<th>${esc(c)}</th>`; });
-        html += `</tr></thead><tbody>`;
-        inTable = true; continue;
-      }
-      if (inTable) {
-        const isAvg = cells[0]==='평균'||cells[0].includes('평균');
-        html += `<tr${isAvg?' class="avg-row"':''}>`;
-        cells.forEach(c => {
-          const isO=c==='O', isX=c==='X';
-          html += `<td style="${isO?'color:var(--green);font-weight:700':isX?'color:var(--red);font-weight:700':''}">${isO?'✅':isX?'❌':esc(c)}</td>`;
-        });
-        html += `</tr>`; continue;
-      }
-    }
-
-    if (inTable && !/^\|/.test(trimmed)) closeTable();
-
-    // 빈 줄
-    if (!trimmed) { flushFeedback(); flushStudent(); html += `<div style="height:5px"></div>`; continue; }
-
-    // 정답 (원문자)
-    if (curSection.includes('정답') && !curSection.includes('정오답') && /^[①②③④⑤]/.test(trimmed)) {
-      html += `<div class="answer-display">${esc(trimmed)}</div>`; continue;
-    }
-
-    // O/X 정오답
-    if (curSection.includes('정오답')) {
-      const isO = /^[Oo오]$/.test(trimmed)||trimmed==='O', isX = /^[Xx엑]$/.test(trimmed)||trimmed==='X';
-      if (isO||isX) {
-        html += `<div class="ox-badge" style="background:${isO?'var(--green-light)':'var(--red-light)'};color:${isO?'var(--green)':'var(--red)'}">
-          ${isO?'⭕ 정답':'❌ 오답'}</div>`; continue;
-      }
-    }
-
-    // 일반 텍스트
-    flushFeedback(); flushStudent();
-    html += `<div class="plain-text">${esc(trimmed)}</div>`;
-  }
-
-  closeCard();
-  container.innerHTML = html || `<div class="prob-card"><div class="prob-card-body"><div class="plain-text" style="color:var(--text2)">결과가 없습니다.</div></div></div>`;
-}
-
-// ──────────────────────────────────────────────
-// PDF 다운로드
-// ──────────────────────────────────────────────
 async function downloadPDF() {
   const btn = document.getElementById('pdfBtn');
   const rc = document.getElementById('resultContent');
