@@ -1,256 +1,185 @@
+// Vercel Node.js Function — maxDuration 300초 (타임아웃 방지)
 export const config = { maxDuration: 300 };
 
+// 허용 모델 화이트리스트 (보안: 임의 모델 호출 방지)
+const ALLOWED_MODELS = new Set([
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash-lite-preview-06-17',
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-preview-05-20',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+  'gemini-1.5-flash-8b',
+]);
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
-const FALLBACK_MODELS = ['gemini-2.5-flash-lite', 'gemini-3-flash-preview'];
-const MAX_ATTACH_BYTES_APPROX = 18 * 1024 * 1024; // base64 decoded rough cap
-const REQUEST_TIMEOUT_MS = 120000;
-
-function json(res, status, payload) {
-  if (!res.headersSent) res.status(status).json(payload);
-}
-
-function parseBody(req) {
-  if (!req.body) return {};
-  if (typeof req.body === 'string') {
-    try { return JSON.parse(req.body); }
-    catch { throw new Error('잘못된 JSON 요청입니다.'); }
-  }
-  return req.body;
-}
-
-function estimateInlineBytes(base64 = '') {
-  const len = base64.length;
-  return Math.floor((len * 3) / 4);
-}
-
-function isBusyStatus(status) {
-  return [429, 500, 502, 503, 504].includes(status);
-}
-
-function isBusyMessage(msg = '') {
-  return /high demand|temporarily unavailable|resource exhausted|overloaded|try again later|quota|rate limit/i.test(msg);
-}
-
-function normalizeRequestedModel(requested) {
-  return FALLBACK_MODELS.includes(requested) ? requested : DEFAULT_MODEL;
-}
-
-function anthropicToGeminiParts(messages) {
-  const allParts = [];
-  let approxBytes = 0;
-
-  for (const msg of messages) {
-    const content = Array.isArray(msg?.content) ? msg.content : [{ type: 'text', text: String(msg?.content ?? '') }];
-    for (const part of content) {
-      if (part?.type === 'text') {
-        const text = String(part.text ?? '');
-        const prev = allParts[allParts.length - 1];
-        if (prev && prev.text !== undefined && !prev._afterBinary) prev.text += `\n${text}`;
-        else allParts.push({ text, _afterBinary: false });
-      } else if (part?.type === 'image' && part?.source?.data && part?.source?.media_type) {
-        approxBytes += estimateInlineBytes(part.source.data);
-        allParts.push({ inlineData: { mimeType: part.source.media_type, data: part.source.data } });
-        allParts.push({ text: '', _afterBinary: true });
-      } else if (part?.type === 'document' && part?.source?.data) {
-        approxBytes += estimateInlineBytes(part.source.data);
-        allParts.push({ inlineData: { mimeType: 'application/pdf', data: part.source.data } });
-        allParts.push({ text: '', _afterBinary: true });
-      }
-    }
-  }
-
-  const cleanParts = allParts
-    .map((p) => {
-      if (p.inlineData) return p;
-      const { _afterBinary, ...rest } = p;
-      return rest;
-    })
-    .filter((p) => p.inlineData || (p.text && p.text.trim()));
-
-  return { cleanParts, approxBytes };
-}
-
-async function fetchWithTimeout(url, options, timeoutMs = REQUEST_TIMEOUT_MS) {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-  try {
-    return await fetch(url, { ...options, signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-function buildGeminiBody({ system, parts, stream }) {
-  return {
-    contents: [{ role: 'user', parts }],
-    ...(system ? { systemInstruction: { parts: [{ text: String(system) }] } } : {}),
-    generationConfig: stream
-      ? { maxOutputTokens: 16000, temperature: 0.2, topP: 0.95, topK: 40 }
-      : { maxOutputTokens: 8000, temperature: 0.1, topP: 0.95, topK: 40 },
-  };
-}
-
-async function callGeminiOnce({ apiKey, model, geminiBody, stream }) {
-  const action = stream ? 'streamGenerateContent?alt=sse' : 'generateContent';
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:${action}&key=${apiKey}`
-    .replace(':streamGenerateContent?alt=sse&key=', ':streamGenerateContent?alt=sse&key=')
-    .replace(':generateContent&key=', ':generateContent?key=');
-
-  const res = await fetchWithTimeout(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(geminiBody),
-  }, stream ? 180000 : REQUEST_TIMEOUT_MS);
-
-  const text = await res.text();
-  return { res, text };
-}
-
-function parseErrorInfo(raw, fallback = 'Gemini API 오류') {
-  try {
-    const data = JSON.parse(raw);
-    const message = data?.error?.message || fallback;
-    return { message, raw: data };
-  } catch {
-    return { message: String(raw || fallback).slice(0, 500), raw: null };
-  }
-}
-
-async function callGeminiWithFallback({ apiKey, system, parts, stream, requestedModel }) {
-  const first = normalizeRequestedModel(requestedModel);
-  const models = [first, ...FALLBACK_MODELS.filter((m) => m !== first)];
-  let lastError = null;
-
-  for (let i = 0; i < models.length; i += 1) {
-    const model = models[i];
-    const geminiBody = buildGeminiBody({ system, parts, stream });
-    try {
-      const { res, text } = await callGeminiOnce({ apiKey, model, geminiBody, stream });
-      if (res.ok) return { ok: true, model, text, stream };
-
-      const info = parseErrorInfo(text);
-      lastError = { status: res.status, message: info.message, model };
-
-      const shouldRetryNextModel = isBusyStatus(res.status) || isBusyMessage(info.message);
-      if (shouldRetryNextModel && i < models.length - 1) continue;
-
-      return { ok: false, status: res.status, message: info.message, model };
-    } catch (err) {
-      const msg = err?.name === 'AbortError' ? 'Gemini 응답 시간 초과' : (err?.message || 'Gemini 호출 실패');
-      lastError = { status: 504, message: msg, model };
-      if (i < models.length - 1) continue;
-    }
-  }
-
-  return {
-    ok: false,
-    status: lastError?.status || 503,
-    message: lastError?.message || '사용 가능한 무료 모델이 모두 혼잡 상태입니다. 잠시 후 다시 시도해주세요.',
-    model: lastError?.model || DEFAULT_MODEL,
-  };
-}
-
-function writeSseHeaders(res) {
-  res.setHeader('Content-Type', 'text/event-stream; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-cache, no-transform');
-  res.setHeader('Connection', 'keep-alive');
-  res.setHeader('X-Accel-Buffering', 'no');
-}
-
-function forwardGeminiSseToClient(rawText, res) {
-  const lines = rawText.split('\n');
-  let sent = '';
-  for (const line of lines) {
-    if (!line.startsWith('data: ')) continue;
-    const payload = line.slice(6).trim();
-    if (!payload || payload === '[DONE]') continue;
-    try {
-      const j = JSON.parse(payload);
-      const full = j?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
-      if (!full || full.length <= sent.length) continue;
-      const delta = full.slice(sent.length);
-      sent = full;
-      if (delta) {
-        res.write(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text: delta } })}\n\n`);
-      }
-    } catch {
-      // ignore malformed SSE chunks
-    }
-  }
-  res.write('data: [DONE]\n\n');
-}
 
 export default async function handler(req, res) {
+  // CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
-
   if (req.method === 'OPTIONS') return res.status(200).end();
-  if (req.method !== 'POST') return json(res, 405, { error: { message: 'POST만 허용됩니다.' } });
 
   try {
-    const body = parseBody(req);
-    const {
-      apiKey: bodyApiKey,
-      system,
-      messages,
-      stream = true,
-      model,
-    } = body || {};
+    // body 파싱
+    const body = typeof req.body === 'string' ? JSON.parse(req.body) : req.body;
+    const { apiKey, system, messages, stream = true, model: reqModel } = body;
 
-    const apiKey = bodyApiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
-    if (!apiKey) return json(res, 400, { error: { message: 'API Key가 없습니다.' } });
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return json(res, 400, { error: { message: 'messages 배열이 비어 있습니다.' } });
+    if (!apiKey) {
+      return res.status(400).json({ error: { message: 'API Key가 없습니다.' } });
+    }
+    if (!messages || !Array.isArray(messages)) {
+      return res.status(400).json({ error: { message: 'messages가 없습니다.' } });
     }
 
-    const { cleanParts, approxBytes } = anthropicToGeminiParts(messages);
-    if (cleanParts.length === 0) {
-      return json(res, 400, { error: { message: '전송할 텍스트/이미지/PDF가 없습니다.' } });
-    }
-    if (approxBytes > MAX_ATTACH_BYTES_APPROX) {
-      return json(res, 413, { error: { message: '첨부 용량이 너무 큽니다. JPG는 선명한 한두 장씩, PDF는 문제 단위로 나눠 업로드해주세요.' } });
+    // 모델 선택: 요청에서 받은 모델이 허용 목록에 있으면 사용, 아니면 기본값
+    const model = (reqModel && ALLOWED_MODELS.has(reqModel)) ? reqModel : DEFAULT_MODEL;
+
+    // Anthropic 형식 → Gemini 형식 변환
+    const allParts = [];
+    for (const msg of messages) {
+      const content = Array.isArray(msg.content)
+        ? msg.content
+        : [{ type: 'text', text: String(msg.content || '') }];
+
+      for (const part of content) {
+        if (part.type === 'text') {
+          const prev = allParts[allParts.length - 1];
+          if (prev && prev.text !== undefined && !prev._afterImage) {
+            prev.text += '\n' + part.text;
+          } else {
+            allParts.push({ text: part.text || '', _afterImage: false });
+          }
+        } else if (part.type === 'image') {
+          allParts.push({
+            inlineData: { mimeType: part.source?.media_type || 'image/jpeg', data: part.source?.data || '' }
+          });
+          allParts.push({ text: '', _afterImage: true });
+        } else if (part.type === 'document') {
+          allParts.push({
+            inlineData: { mimeType: 'application/pdf', data: part.source?.data || '' }
+          });
+          allParts.push({ text: '', _afterImage: true });
+        }
+      }
     }
 
-    const result = await callGeminiWithFallback({
-      apiKey,
-      system,
-      parts: cleanParts,
-      stream: !!stream,
-      requestedModel: model,
-    });
+    // 빈 텍스트 파트 제거 + _afterImage 플래그 제거
+    const cleanParts = allParts
+      .map(p => {
+        if (p.inlineData) return p;
+        const { _afterImage, ...rest } = p;
+        return rest;
+      })
+      .filter(p => p.inlineData || (p.text && p.text.trim()));
 
-    if (!result.ok) {
-      const busy = isBusyStatus(result.status) || isBusyMessage(result.message);
-      return json(res, result.status || 500, {
-        error: {
-          message: busy
-            ? `현재 무료 모델이 혼잡 상태입니다. 잠시 후 다시 시도해주세요. (마지막 시도 모델: ${result.model})`
-            : result.message,
-        },
-        busy,
-        model: result.model,
-        allowedFreeModels: FALLBACK_MODELS,
-      });
+    if (!cleanParts.length) {
+      return res.status(400).json({ error: { message: '전송할 내용이 없습니다.' } });
     }
 
+    // generation 설정: 스트리밍(분석)은 낮은 temperature, 비스트리밍(OCR)은 약간 높게
+    const generationConfig = stream
+      ? { maxOutputTokens: 16000, temperature: 0.2, topP: 0.95, topK: 40 }
+      : { maxOutputTokens: 8000,  temperature: 0.4, topP: 0.95, topK: 40 };
+
+    const geminiBody = {
+      contents: [{ role: 'user', parts: cleanParts }],
+      systemInstruction: system ? { parts: [{ text: system }] } : undefined,
+      generationConfig,
+    };
+
+    // 오류 파싱 헬퍼
+    const parseGeminiError = (rawText, status) => {
+      let errMsg = `Gemini API 오류 (${status})`;
+      try { errMsg = JSON.parse(rawText).error?.message || errMsg; } catch { errMsg = rawText.slice(0, 300) || errMsg; }
+      const retryMatch = rawText.match(/retry in ([\d.]+)s/i);
+      const retryAfter = retryMatch ? Math.ceil(parseFloat(retryMatch[1])) + 2 : 65;
+      return { errMsg, retryAfter };
+    };
+
+    // ── 비스트리밍 (OCR / 텍스트 추출용) ──
     if (!stream) {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+      const apiRes = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(geminiBody),
+      });
+
+      const resText = await apiRes.text();
+      if (!apiRes.ok) {
+        const { errMsg, retryAfter } = parseGeminiError(resText, apiRes.status);
+        return res.status(apiRes.status).json({ error: { message: errMsg }, retryAfter });
+      }
+
       let text = '';
       try {
-        const data = JSON.parse(result.text);
-        text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text || '').join('') || '';
+        const data = JSON.parse(resText);
+        text = data.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
       } catch {}
-      return json(res, 200, {
-        content: [{ type: 'text', text }],
-        model: result.model,
-        allowedFreeModels: FALLBACK_MODELS,
-      });
+
+      return res.status(200).json({ content: [{ type: 'text', text }] });
     }
 
-    writeSseHeaders(res);
-    forwardGeminiSseToClient(result.text, res);
-    return res.end();
+    // ── 스트리밍 (분석용) ──
+    const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?alt=sse&key=${apiKey}`;
+    const apiRes = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(geminiBody),
+    });
+
+    if (!apiRes.ok) {
+      const errText = await apiRes.text();
+      const { errMsg, retryAfter } = parseGeminiError(errText, apiRes.status);
+      return res.status(apiRes.status).json({ error: { message: errMsg }, retryAfter });
+    }
+
+    // SSE 스트리밍 응답
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+
+    const reader = apiRes.body.getReader();
+    const decoder = new TextDecoder();
+    let buf = '';
+
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) { res.write('data: [DONE]\n\n'); break; }
+
+        buf += decoder.decode(value, { stream: true });
+        const lines = buf.split('\n');
+        buf = lines.pop(); // 마지막 불완전한 줄 보존
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          const d = line.slice(6).trim();
+          if (!d || d === '[DONE]') continue;
+          try {
+            const j = JSON.parse(d);
+            const text = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+            if (text) {
+              // Anthropic content_block_delta 형식으로 변환 (index.html 파서 호환)
+              res.write(`data: ${JSON.stringify({
+                type: 'content_block_delta',
+                delta: { type: 'text_delta', text }
+              })}\n\n`);
+            }
+          } catch {}
+        }
+      }
+    } catch {
+      // 스트리밍 중 연결 끊김 등 — 헤더 이미 전송됐으므로 조용히 종료
+    } finally {
+      res.end();
+    }
+
   } catch (e) {
-    return json(res, 500, { error: { message: e?.message || '서버 오류' } });
+    if (!res.headersSent) {
+      res.status(500).json({ error: { message: e.message || '서버 오류' } });
+    }
   }
 }
