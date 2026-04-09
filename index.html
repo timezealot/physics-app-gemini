@@ -414,7 +414,8 @@ const SYSTEM_ANALYSIS = `물리1 교사. 학생 풀이를 분석하고 피드백
 
 공통 규칙:
 - ▶ 1. 정답: [해설 원문]에서 확인한 원문자(①②③④⑤)만. 직접 계산 금지.
-- ▶ 2. 정오답 판단: 학생 선택 정답과 해설 정답 비교 → O 또는 X만.
+- ▶ 2. 정오답 판단: 반드시 [정답] 목록과 [학생 선택] 목록의 번호만 비교해 O 또는 X 출력. 이미지나 풀이 내용으로 추론하는 것 절대 금지. 둘 중 하나라도 없으면 "입력 필요"로 표시.
+- ▶ 3. 문제 풀이법: ㄱ,ㄴ,ㄷ 보기 문제는 "1단계: 보기 ㄱ — (내용)", "2단계: 보기 ㄴ — (내용)" 형식으로 각 보기를 단계로 표현. 문제 지문의 <보기> 텍스트를 그대로 단계 내용에 쓰지 말 것.
 - ▶ 4. 학생 풀이 정리: 학생풀이에서 식·계산·답 그대로. 추측 금지.
 - ▶ 6. 역량 점수: X점/10점|이유:한문장. 평가불가 금지.
 - 형식(▶ =====) 변경 금지. LaTeX 금지. 인사말 금지.`;
@@ -469,7 +470,7 @@ const FMT_PROBLEM = `
 ▶ 1. 정답
 (해설에서 확인한 정답 원문자)
 ▶ 2. 정오답 판단
-(O 또는 X)
+(정답번호와 학생선택번호가 같으면 O, 다르면 X. 번호가 입력되지 않은 경우 "입력 필요")
 ▶ 3. 문제 풀이법
 1단계: (해설 내용 그대로)
 2단계: (해설 내용 그대로)
@@ -1025,7 +1026,10 @@ function renderResult(text,container){
       closeFeedback();closeStudent();
       const nm=trimmed.match(/^(\d+)단계[:\s]+(.*)/);
       if(nm){
-        html+=`<div class="step-row"><span class="step-num">${nm[1]}</span><span class="step-text">${esc(nm[2])}</span></div>`;
+        const sc_=nm[2].trim();
+        // <보기>만 있는 단계 건너뜀 (ㄱㄴㄷ 문제 지문 오파싱 방지)
+        if(sc_==='<보기>'||sc_==='보기'||/^<보기>\s*$/.test(sc_)){continue;}
+        html+=`<div class="step-row"><span class="step-num">${nm[1]}</span><span class="step-text">${esc(sc_)}</span></div>`;
         continue;
       }
     }
@@ -1154,15 +1158,20 @@ function renderResult(text,container){
       continue;
     }
     if(curSection.includes('정오답')){
-      const isO=trimmed==='O'||trimmed==='o';
-      const isX=trimmed==='X'||trimmed==='x';
+      const upper=trimmed.toUpperCase();
+      const isO=upper==='O';
+      const isX=upper==='X';
       if(isO||isX){
-        html+=`<div style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;background:${isO?'#dcfce7':'#fee2e2'};margin-top:2px">`;
-        html+=`<span style="font-size:16px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'O':'X'}</span>`;
-        html+=`<span style="font-size:12px;color:${isO?'var(--green)':'var(--red)'}">${isO?'정답':'오답'}</span>`;
-        html+=`</div>`;
+        // PDF 호환: inline-flex 대신 block (html2canvas inline-flex 렌더링 버그)
+        html+=`<div style="display:block;width:fit-content;padding:5px 14px;border-radius:7px;background:${isO?'#dcfce7':'#fee2e2'};margin-top:4px"><span style="font-size:15px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'⭕ 정답':'❌ 오답'}</span></div>`;
         continue;
       }
+      // "입력 필요" 등 기타 텍스트 표시
+      if(trimmed&&!trimmed.startsWith('(정답번호')&&trimmed!=='(O 또는 X)'){
+        html+=`<div style="font-size:13px;color:var(--text2);padding:2px 0">${esc(trimmed)}</div>`;
+        continue;
+      }
+      continue;
     }
 
     // 총평 섹션 텍스트 (강점/보완/학습방향)
