@@ -77,10 +77,11 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-seri
 
 /* ── 정답 입력 ── */
 .answer-grid{display:grid;gap:6px;margin-top:8px;}
-.answer-row{display:flex;align-items:center;gap:8px;}
-.answer-num{font-size:12px;font-weight:600;color:var(--text2);width:28px;flex-shrink:0;}
-.answer-btns{display:flex;gap:3px;flex-wrap:wrap;}
-.ans-btn{width:28px;height:28px;border-radius:5px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:12px;cursor:pointer;transition:all .1s;display:flex;align-items:center;justify-content:center;}
+.answer-grid{display:flex;flex-direction:column;gap:10px;}
+.answer-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;}
+.answer-num{font-size:12px;font-weight:700;color:var(--text2);width:32px;flex-shrink:0;}
+.answer-btns{display:flex;gap:4px;flex-wrap:wrap;}
+.ans-btn{width:30px;height:30px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer;transition:all .1s;display:flex;align-items:center;justify-content:center;}
 .ans-btn:hover{border-color:var(--accent);color:var(--accent);}
 .ans-btn.selected-correct{background:var(--accent);color:#fff;border-color:var(--accent);}
 .ans-btn.selected-student{background:var(--surface2);color:var(--text);border-color:var(--text2);font-weight:700;}
@@ -229,7 +230,15 @@ body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-seri
         <span>✅ 정답 입력 (선택 — 입력하면 정확도가 크게 올라갑니다)</span>
         <div class="count-btns" id="countBtns"></div>
       </div>
-      <div style="padding:12px 16px;" id="answerGrid"></div>
+      <div style="padding:12px 16px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:0 10px;">
+          <span style="width:32px;flex-shrink:0;"></span>
+          <span style="font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.04em;">정답 ①②③④⑤</span>
+          <span style="width:1px;height:14px;background:var(--border);flex-shrink:0;"></span>
+          <span style="font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.04em;">학생 선택 ①②③④⑤</span>
+        </div>
+        <div id="answerGrid"></div>
+      </div>
     </div>
 
     <!-- 파일 업로드 3칸 -->
@@ -506,6 +515,7 @@ function initAnswerUI() {
     btn.onclick = () => { problemCount = i; initAnswerUI(); };
     countEl.appendChild(btn);
   }
+  gridEl.className = 'answer-grid';
   gridEl.innerHTML = '';
   const CIRCLE = ['①','②','③','④','⑤'];
   for (let n = 1; n <= problemCount; n++) {
@@ -526,11 +536,13 @@ function initAnswerUI() {
       };
       corrWrap.appendChild(b);
     });
+    // 구분선
+    const divider = document.createElement('div');
+    divider.style.cssText = 'width:1px;height:20px;background:var(--border);flex-shrink:0;';
     // 학생 답 버튼
     const studWrap = document.createElement('div');
     studWrap.className = 'answer-btns';
-    studWrap.title = '학생답(회색)';
-    studWrap.style.marginLeft = '6px';
+    studWrap.title = '학생답(진하게)';
     CIRCLE.forEach(c => {
       const b = document.createElement('button');
       b.className = 'ans-btn' + (studentAnswers[n] === c ? ' selected-student' : '');
@@ -542,6 +554,7 @@ function initAnswerUI() {
       studWrap.appendChild(b);
     });
     row.appendChild(corrWrap);
+    row.appendChild(divider);
     row.appendChild(studWrap);
     gridEl.appendChild(row);
   }
@@ -632,13 +645,29 @@ async function callProxy({parts, system='', stream=false, model=MODEL.ocr, attem
     body: JSON.stringify({apiKey, system, stream, model, messages:[{role:'user', content:parts}]}),
   });
 
+  // ── 비스트리밍: body를 한 번만 읽음 ──
+  if (!stream) {
+    const raw = await res.text();
+    if (!res.ok) {
+      let errMsg = 'API 오류', retryAfter = 65;
+      try { const j = JSON.parse(raw); errMsg = j.error?.message||errMsg; retryAfter = j.retryAfter||65; } catch { errMsg = raw.slice(0,200); }
+      errMsg = errMsg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
+      if (res.status === 429 && attempt < 2) {
+        if (setMsgFn) setMsgFn(`⏳ quota 초과 — ${retryAfter}초 후 자동 재시도... (${attempt+1}/2)`);
+        await sleep(retryAfter * 1000);
+        return callProxy({parts, system, stream, model: attempt>=1 ? MODEL.fallback : model, attempt: attempt+1, setMsgFn});
+      }
+      throw new Error(errMsg);
+    }
+    try { const d = JSON.parse(raw); return d.content?.map(c=>c.text||'').join('').trim()||''; } catch { return ''; }
+  }
+
+  // ── 스트리밍: ok 아니면 에러 반환 ──
   if (!res.ok) {
     const raw = await res.text();
     let errMsg = 'API 오류', retryAfter = 65;
     try { const j = JSON.parse(raw); errMsg = j.error?.message||errMsg; retryAfter = j.retryAfter||65; } catch { errMsg = raw.slice(0,200); }
-    // 모델명 제거
     errMsg = errMsg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
-
     if (res.status === 429 && attempt < 2) {
       if (setMsgFn) setMsgFn(`⏳ quota 초과 — ${retryAfter}초 후 자동 재시도... (${attempt+1}/2)`);
       await sleep(retryAfter * 1000);
@@ -646,12 +675,7 @@ async function callProxy({parts, system='', stream=false, model=MODEL.ocr, attem
     }
     throw new Error(errMsg);
   }
-
-  if (!stream) {
-    const raw = await res.text();
-    try { const d = JSON.parse(raw); return d.content?.map(c=>c.text||'').join('').trim()||''; } catch { return ''; }
-  }
-  return res; // 스트리밍은 Response 반환
+  return res; // 스트리밍 Response 반환
 }
 
 async function streamResponse(res, onChunk) {
@@ -719,41 +743,100 @@ async function analyze() {
   try {
     if (isMock) { await sleep(900); renderResult(MOCK_RESPONSE, rc); return; }
 
-    // ── Step 1: 해설 OCR (이미지 전체 한 번에) ──
+    // ── Step 1: OCR (해설 + 학생 풀이를 단일 호출로 합침 — quota 최소화) ──
     let solutionOcrText = aT;
-    if (!solutionOcrText && store.a.length) {
-      setMsg('🔍 해설 이미지 분석 중... (1/3)<br><small style="color:var(--text3)">수식과 정답을 정확히 읽습니다</small>');
-      solutionOcrText = await callProxy({
-        parts: buildParts(SYSTEM_OCR_SOLUTION, store.a),
-        system: SYSTEM_OCR_SOLUTION,
-        model: MODEL.ocr,
-        setMsgFn: setMsg,
-      });
-    }
-
-    // ── Step 2: 학생 풀이 OCR (3초 대기 후) ──
     let studentOcrText = sT;
-    if (!studentOcrText && store.s.length) {
-      await sleep(4000); // quota 회복
-      setMsg('🔍 학생 풀이 분석 중... (2/3)<br><small style="color:var(--text3)">손글씨를 읽습니다</small>');
-      studentOcrText = await callProxy({
-        parts: buildParts(SYSTEM_OCR_STUDENT, store.s),
-        system: SYSTEM_OCR_STUDENT,
+
+    const needSolutionOcr = !solutionOcrText && store.a.length > 0;
+    const needStudentOcr  = !studentOcrText  && store.s.length > 0;
+
+    if (needSolutionOcr || needStudentOcr) {
+      setMsg('🔍 이미지 분석 중... (1/2)<br><small style="color:var(--text3)">해설과 학생 풀이를 한 번에 읽습니다</small>');
+
+      // 해설과 학생 풀이를 하나의 프롬프트로 합쳐서 단일 API 호출
+      const combinedPrompt = `물리1 이미지 분석 전문가. 두 종류의 이미지를 순서대로 분석합니다.
+
+=== 해설 분석 ===
+[해설 이미지]에서 각 문제의 정답과 풀이를 추출하세요.
+
+출력 형식:
+[해설]
+[문제1]
+정답: ①
+풀이:
+1. (해설 내용 그대로)
+2. (수식 그대로, 예: ΣM_A = (mg × 2L) - (T × L) = 0)
+3. (결론)
+
+[문제2]
+...
+
+=== 학생 풀이 분석 ===
+[학생 풀이 이미지]에서 각 문제의 풀이를 추출하세요.
+
+출력 형식:
+[학생풀이]
+[문제1]
+- 식: (학생이 쓴 식 그대로)
+- 계산: (학생의 계산 그대로)
+- 답: (학생의 최종 답)
+
+[문제2]
+...
+
+공통 규칙:
+- 수식·숫자·기호를 이미지에 있는 그대로 옮길 것
+- 분수(4L/13≠13L/4), 계수(2mg≠mg), 첨자(T'≠T'') 정확히
+- 각 문제 한 번만 출력
+- 해설 원문자(①②③④⑤) 반드시 포함
+- 학생 풀이: 흘려쓴 글씨도 최대한 해독, 없으면 (풀이 없음)`;
+
+      const combinedParts = [{type:'text', text: combinedPrompt}];
+
+      if (needSolutionOcr) {
+        combinedParts.push({type:'text', text:'[해설 이미지]'});
+        store.a.forEach((f,i) => {
+          combinedParts.push({type:'text', text:`해설${i+1}`});
+          if (f.isPdf) combinedParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
+          else combinedParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
+        });
+      }
+      if (needStudentOcr) {
+        combinedParts.push({type:'text', text:'[학생 풀이 이미지]'});
+        store.s.forEach((f,i) => {
+          combinedParts.push({type:'text', text:`학생풀이${i+1}`});
+          if (f.isPdf) combinedParts.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
+          else combinedParts.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
+        });
+      }
+
+      const combinedResult = await callProxy({
+        parts: combinedParts,
         model: MODEL.ocr,
         setMsgFn: setMsg,
       });
+
+      // 결과 분리: [해설] 블록과 [학생풀이] 블록으로 나눔
+      if (needSolutionOcr) {
+        const solMatch = combinedResult.match(/\[해설\]([\s\S]*?)(?=\[학생풀이\]|$)/);
+        solutionOcrText = solMatch ? solMatch[1].trim() : combinedResult;
+      }
+      if (needStudentOcr) {
+        const stuMatch = combinedResult.match(/\[학생풀이\]([\s\S]*?)$/);
+        studentOcrText = stuMatch ? stuMatch[1].trim() : '';
+      }
     }
 
     // ── Step 3: 분석 (4초 대기 후, 스트리밍) ──
-    await sleep(4000); // quota 회복
-    setMsg('⚡ 풀이 분석 중... (3/3)<br><small style="color:var(--text3)">피드백을 작성합니다</small>');
+    await sleep(8000); // quota 회복 — OCR 후 충분히 대기
+    setMsg('⚡ 풀이 분석 중... (2/2)<br><small style="color:var(--text3)">피드백을 작성합니다</small>');
 
     // 분석 파트 구성
     const analysisParts = [];
 
     // 해설 원문
     if (solutionOcrText) {
-      analysisParts.push({type:'text', text:`[해설 원문 — 절대 기준]\n이 텍스트와 원본 이미지를 함께 참고하세요. 텍스트와 이미지가 다르면 이미지 우선.\n\n${solutionOcrText}`});
+      analysisParts.push({type:'text', text:`[해설 원문 — 절대 기준]\n이 텍스트와 원본 이미지를 함께 참고하세요. 텍스트와 이미지가 다르면 이미지 우선.\n수식·수치·기호를 한 글자도 바꾸지 말고 그대로 풀이법에 복사하세요.\n\n${solutionOcrText}`});
     }
     // 해설 원본 이미지도 함께 전달 (텍스트 오류 보정용)
     if (aT && !store.a.length) {
