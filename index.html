@@ -79,6 +79,30 @@ textarea::placeholder{color:var(--text3);}
 .lightbox.open{display:flex;}
 .lightbox img{max-width:90vw;max-height:90vh;border-radius:8px;}
 .lightbox-close{position:absolute;top:20px;right:24px;color:#fff;font-size:28px;cursor:pointer;background:none;border:none;}
+/* 결과 카드 개선 */
+.section-label{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.07em;text-transform:uppercase;margin:16px 0 8px;}
+.section-label-bar{width:3px;height:13px;background:var(--accent);border-radius:2px;flex-shrink:0;}
+.step-row{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:8px;padding:9px 13px;margin-bottom:5px;}
+.step-num{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-light);min-width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
+.step-text{font-size:13px;color:var(--text);line-height:1.65;}
+.bullet-row{font-size:13px;color:var(--text);line-height:1.8;padding:4px 0 4px 14px;border-left:2px solid var(--border);margin-bottom:3px;}
+.feedback-box{background:#f0f9ff;border:1px solid #bae6fd;border-radius:9px;padding:12px 15px;margin-top:4px;}
+.feedback-box .fb-row{font-size:13px;color:#0c4a6e;line-height:1.75;padding:2px 0;}
+.feedback-box .fb-label{font-weight:700;color:#075985;}
+.score-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px;}
+.score-cell{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:11px 13px;}
+.score-cell-label{font-size:10px;color:var(--text2);margin-bottom:5px;}
+.score-cell-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700;line-height:1;}
+.score-cell-max{font-size:9px;color:var(--text3);margin-bottom:7px;}
+.score-cell-reason{font-size:11px;color:var(--text2);line-height:1.5;border-top:1px solid var(--border);padding-top:6px;margin-top:4px;}
+.score-total-row{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:8px;padding-top:8px;border-top:2px solid var(--border);}
+.student-box{background:#fafaf9;border:1px solid var(--border);border-radius:9px;padding:12px 15px;margin-top:4px;}
+.student-box .sr{font-size:13px;color:var(--text);line-height:1.8;padding:1px 0;}
+.student-box .sr-label{font-weight:600;color:var(--text2);}
+.total-card{background:var(--surface);border:2px solid var(--text);border-radius:14px;margin-top:20px;overflow:hidden;box-shadow:var(--shadow);}
+.total-card-header{padding:16px 20px;background:var(--text);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;}
+.prob-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow);}
+.prob-card-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--surface2);}
 </style>
 </head>
 <body>
@@ -813,25 +837,25 @@ async function analyze(){
 문제N 피드백
 =====
 ▶ 1. 정답
-①
+(해설에서 확인한 정답 원문자)
 ▶ 2. 정오답 판단
-O
+(O 또는 X)
 ▶ 3. 문제 풀이법
-1단계:
-2단계:
-3단계:
-4단계:
+1단계: (해설 내용 그대로)
+2단계: (해설 내용 그대로)
+3단계: (해설 수식·수치 그대로)
+4단계: (해설의 최종 결론)
 ▶ 4. 학생 풀이 정리
-- 학생이 세운 식:
-- 학생의 계산 과정:
-- 학생의 최종 답:
+- 학생이 세운 식: (학생이 쓴 식 그대로)
+- 학생의 계산 과정: (학생의 계산 그대로)
+- 학생의 최종 답: (학생의 최종 답)
 ▶ 5. 풀이 피드백
-- 해설 기준 평가:
-- 개선점:
+- 해설 기준 평가: (학생 풀이와 해설을 단계별로 비교)
+- 개선점: (구체적인 개선 방향)
 ▶ 6. 역량 점수
-- 개념 이해도: X점 / 10점 | 이유:
-- 풀이 전개력: X점 / 10점 | 이유:
-- 문제 해석력: X점 / 10점 | 이유:
+- 개념 이해도: X점 / 10점 | 이유: (한 문장)
+- 풀이 전개력: X점 / 10점 | 이유: (한 문장)
+- 문제 해석력: X점 / 10점 | 이유: (한 문장)
 - 합계: XX점 / 30점`;
 
   const FMT_TOTAL=`
@@ -1248,9 +1272,7 @@ ${ANALYSIS_RETRY_SYSTEM}`,buildAnalysisParts(extractedRaw,studentOcrText),{model
       }
     }
 
-    // 분석 응답에 총평이 붙어 나오면 제거 (총평은 분석 결과에 포함되므로 중복 방지)
-    const stripTotal=(t)=>{const idx=t.indexOf('\n=====\n총평');return idx>0?t.slice(0,idx):t;};
-    const mergedText=mergeExtractedSolutions(stripTotal(analysisText),solutionMap);
+    const mergedText=mergeExtractedSolutions(analysisText,solutionMap);
     renderResult(mergedText,rc);
   }catch(e){
     rc.innerHTML=`<div class="error-box">⚠️ 오류: ${e.message}<br><small>정확도 우선 모드에서는 해설 원문과 문제 번호의 무결성을 먼저 검사합니다. JPG는 선명하게, PDF는 문제 단위로 나누면 정확도가 더 올라갑니다.</small></div><button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
@@ -1288,25 +1310,41 @@ function renderResult(text,container){
   const corrected=correctPhysicsText(text);
   container.innerHTML='';
 
-  // Gemini가 ===== 앞에 불필요한 텍스트를 붙이는 경우 제거
-  // 첫 번째 ===== 이전 텍스트를 버림
-  const firstSep = corrected.indexOf('=====');
-  const cleanText = firstSep > 0 ? corrected.slice(firstSep) : corrected;
+  // preamble 제거: 첫 ===== 이전 텍스트 버림
+  const firstSep=corrected.indexOf('=====');
+  const cleanText=firstSep>0?corrected.slice(firstSep):corrected;
 
   const lines=cleanText.split('\n');
-  let html='',inCard=false,inScoreGrid=false,inTable=false;
   const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
-  // 열린 요소 닫기
+  let html='';
+  let inCard=false,inScoreGrid=false,inTable=false,inFeedback=false,inStudent=false;
+  let curSection='';
+
   const closeScoreGrid=()=>{if(inScoreGrid){html+=`</div>`;inScoreGrid=false;}};
   const closeTable=()=>{if(inTable){html+=`</tbody></table></div>`;inTable=false;}};
-  const closeCard=()=>{closeScoreGrid();closeTable();if(inCard){html+=`</div></div>`;inCard=false;}};
+  const closeFeedback=()=>{if(inFeedback){html+=`</div>`;inFeedback=false;}};
+  const closeStudent=()=>{if(inStudent){html+=`</div>`;inStudent=false;}};
+  const closeCard=()=>{
+    closeScoreGrid();closeTable();closeFeedback();closeStudent();
+    if(inCard){html+=`</div></div>`;inCard=false;}
+    curSection='';
+  };
 
   const openCard=(title,isSummary)=>{
     closeCard();
-    html+=`<div class="${isSummary?'total-card':'prob-card'}" style="margin-bottom:14px">`;
-    html+=`<div class="${isSummary?'total-card-header':'prob-card-header'}" style="padding:14px 18px;font-size:13px;font-weight:700">${esc(title)}</div>`;
-    html+=`<div style="padding:16px 18px">`;
+    if(isSummary){
+      html+=`<div class="total-card">`;
+      html+=`<div class="total-card-header">📊 ${esc(title)}</div>`;
+    } else {
+      // 문제 번호 추출
+      const numM=title.match(/(\d+)/);
+      const num=numM?numM[1]:'';
+      const ox=''; // O/X는 ▶2 섹션에서
+      html+=`<div class="prob-card">`;
+      html+=`<div class="prob-card-header"><span style="font-size:13px;font-weight:700">문제 ${num}번 피드백</span></div>`;
+    }
+    html+=`<div style="padding:16px 20px 20px">`;
     inCard=true;
   };
 
@@ -1318,52 +1356,67 @@ function renderResult(text,container){
       const next=(lines[i+1]||'').trim();
       if(next&&!/^={4,}/.test(next)){
         i++;
-        openCard(next,next.includes('총평'));
-        if((lines[i+1]||'').trim().startsWith('='))i++;
+        openCard(next,next==='총평'||next.includes('총평'));
+        if((lines[i+1]||'').trim().match(/^={4,}/))i++;
       }
       continue;
     }
 
-    // 카드가 없으면 자동 생성
-    if(!inCard){html+=`<div class="prob-card" style="margin-bottom:14px"><div style="padding:16px 18px">`;inCard=true;}
+    if(!inCard){
+      html+=`<div class="prob-card"><div style="padding:16px 20px 20px">`;
+      inCard=true;
+    }
 
-    // ▶ 항목 제목
+    // ▶ 섹션 헤더
     if(/^▶/.test(trimmed)){
-      closeScoreGrid();closeTable();
-      html+=`<div style="font-size:12px;font-weight:700;color:var(--text2);text-transform:uppercase;letter-spacing:.06em;margin:14px 0 8px;display:flex;align-items:center;gap:6px"><span style="width:3px;height:12px;background:var(--accent);border-radius:2px;display:inline-block;flex-shrink:0"></span>${esc(trimmed.replace(/^▶\s*/,''))}</div>`;
+      closeScoreGrid();closeTable();closeFeedback();closeStudent();
+      const label=trimmed.replace(/^▶\s*\d+\.\s*/,'').replace(/^▶\s*/,'');
+      curSection=label;
+
+      // 섹션별 배지 색상
+      let badgeColor='var(--accent)';
+      let badgeBg='var(--accent-light)';
+      if(label.includes('정오답')){badgeColor='var(--text2)';badgeBg='var(--surface2)';}
+      else if(label.includes('피드백')){badgeColor='#0369a1';badgeBg='#e0f2fe';}
+      else if(label.includes('역량')||label.includes('점수')){badgeColor='var(--green)';badgeBg='#dcfce7';}
+      else if(label.includes('학생')){badgeColor='var(--yellow)';badgeBg='#fef9c3';}
+
+      html+=`<div class="section-label"><span class="section-label-bar" style="background:${badgeColor}"></span><span style="color:${badgeColor}">${esc(label)}</span></div>`;
       continue;
     }
 
-    // 풀이 단계
+    // 풀이 단계 (N단계:)
     if(/^\d+단계[:\s]/.test(trimmed)){
+      closeFeedback();closeStudent();
       const nm=trimmed.match(/^(\d+)단계[:\s]+(.*)/);
       if(nm){
-        html+=`<div style="display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:7px;padding:8px 12px;margin-bottom:6px"><span style="font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:600;color:var(--accent);background:var(--accent-light);min-width:20px;height:20px;border-radius:4px;display:flex;align-items:center;justify-content:center;flex-shrink:0;padding:0 3px">${nm[1]}</span><span style="font-size:13px;color:var(--text);line-height:1.6">${esc(nm[2])}</span></div>`;
+        html+=`<div class="step-row"><span class="step-num">${nm[1]}</span><span class="step-text">${esc(nm[2])}</span></div>`;
         continue;
       }
     }
 
-    // - 항목들
+    // - 항목 처리
     if(/^-\s+/.test(trimmed)){
+      // 역량 점수
       const scoreM=trimmed.match(/^-\s+(개념 이해도|풀이 전개력|문제 해석력):\s*(\d+)점\s*\/\s*10점(?:\s*\|\s*이유:\s*(.*))?/);
       const totalM=trimmed.match(/^-\s+합계:\s*(\d+)점\s*\/\s*30점/);
 
       if(scoreM){
+        closeFeedback();closeStudent();
         const label=scoreM[1],score=parseInt(scoreM[2]),reason=scoreM[3]||'';
         const isPerfect=score===10;
         const col=isPerfect?'var(--green)':score>=8?'var(--accent)':score>=6?'var(--yellow)':'var(--red)';
-        // 첫 번째 역량 항목에서 grid 열기
         if(label==='개념 이해도'){
           closeScoreGrid();
-          html+=`<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px">`;
+          html+=`<div class="score-grid">`;
           inScoreGrid=true;
         }
-        html+=`<div style="background:var(--surface);border:1px solid var(--border);border-radius:9px;padding:10px 12px">`;
-        html+=`<div style="font-size:10px;color:var(--text2);margin-bottom:4px">${esc(label)}</div>`;
-        html+=`<div style="font-family:'JetBrains Mono',monospace;font-size:20px;font-weight:700;color:${col};line-height:1">${score}</div>`;
-        html+=`<div style="font-size:9px;color:var(--text3);margin-bottom:6px">/ 10점</div>`;
-        if(!isPerfect&&reason&&reason!=='만점'){
-          html+=`<div style="font-size:11px;color:var(--text2);line-height:1.5;border-top:1px solid var(--border);padding-top:6px;margin-top:2px">${esc(reason)}</div>`;
+        html+=`<div class="score-cell">`;
+        html+=`<div class="score-cell-label">${esc(label)}</div>`;
+        html+=`<div class="score-cell-val" style="color:${col}">${score}</div>`;
+        html+=`<div class="score-cell-max">/ 10점</div>`;
+        if(reason&&reason!=='만점'){
+          html+=`<div class="score-cell-reason">${esc(reason)}</div>`;
         }
         html+=`</div>`;
         continue;
@@ -1371,62 +1424,121 @@ function renderResult(text,container){
 
       if(totalM){
         closeScoreGrid();
-        html+=`<div style="display:flex;align-items:center;justify-content:flex-end;margin-top:6px;gap:6px">`;
-        html+=`<span style="font-size:12px;color:var(--text2)">합계</span>`;
-        html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:18px;font-weight:700;color:var(--green)">${totalM[1]}</span>`;
-        html+=`<span style="font-size:11px;color:var(--text3)">/ 30점</span></div>`;
+        const total=parseInt(totalM[1]);
+        const totalCol=total>=25?'var(--green)':total>=18?'var(--accent)':total>=12?'var(--yellow)':'var(--red)';
+        html+=`<div class="score-total-row">`;
+        html+=`<span style="font-size:12px;color:var(--text2);font-weight:600">총점</span>`;
+        html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:${totalCol}">${total}</span>`;
+        html+=`<span style="font-size:12px;color:var(--text3)">/ 30점</span>`;
+        html+=`</div>`;
         continue;
       }
 
-      // 일반 - 항목
-      closeScoreGrid();
-      html+=`<div style="font-size:13px;color:var(--text);line-height:1.8;padding:4px 0 4px 12px;border-left:2px solid var(--border);margin-bottom:2px">${esc(trimmed)}</div>`;
+      // 피드백 섹션 항목
+      if(curSection.includes('피드백')){
+        closeFeedback();closeStudent();
+        if(!inFeedback){
+          html+=`<div class="feedback-box">`;
+          inFeedback=true;
+        }
+        const colon=trimmed.indexOf(':');
+        if(colon>0){
+          const fbLabel=trimmed.slice(2,colon+1);
+          const fbVal=trimmed.slice(colon+1).trim();
+          html+=`<div class="fb-row"><span class="fb-label">${esc(fbLabel)}</span> ${esc(fbVal)}</div>`;
+        } else {
+          html+=`<div class="fb-row">${esc(trimmed)}</div>`;
+        }
+        continue;
+      }
+
+      // 학생 풀이 정리 항목
+      if(curSection.includes('학생')){
+        closeFeedback();
+        if(!inStudent){
+          html+=`<div class="student-box">`;
+          inStudent=true;
+        }
+        const colon=trimmed.indexOf(':');
+        if(colon>0){
+          const srLabel=trimmed.slice(2,colon+1);
+          const srVal=trimmed.slice(colon+1).trim();
+          html+=`<div class="sr"><span class="sr-label">${esc(srLabel)}</span> ${esc(srVal)}</div>`;
+        } else {
+          html+=`<div class="sr">${esc(trimmed)}</div>`;
+        }
+        continue;
+      }
+
+      // 정답/정오답
+      closeScoreGrid();closeFeedback();closeStudent();
+      html+=`<div class="bullet-row">${esc(trimmed)}</div>`;
       continue;
     }
 
-    // 파이프 표
+    // 파이프 표 (총평 점수표)
     if(/^\|/.test(trimmed)){
-      // 구분선 줄 건너뛰기
       if(/^\|[-| ]+\|$/.test(trimmed))continue;
       const cells=trimmed.split('|').map(c=>c.trim()).filter(c=>c);
       if(!cells.length)continue;
+      closeFeedback();closeStudent();closeScoreGrid();
 
-      const isHeader=cells.some(c=>['문제','정오답','개념','풀이','해석력','합계'].includes(c));
+      const isHeader=cells.some(c=>['문제','정오답','개념','풀이','해석력','합계','이해도','전개력'].includes(c));
       if(isHeader&&!inTable){
-        closeScoreGrid();
         html+=`<div style="overflow-x:auto;margin:8px 0"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>`;
-        cells.forEach(c=>{html+=`<th style="background:var(--surface2);color:var(--text2);padding:9px 12px;text-align:center;border-bottom:2px solid var(--border);font-weight:600;white-space:nowrap">${esc(c)}</th>`;});
+        cells.forEach(c=>{html+=`<th style="background:var(--surface2);color:var(--text2);padding:9px 12px;text-align:center;border-bottom:2px solid var(--border);font-weight:700;white-space:nowrap">${esc(c)}</th>`;});
         html+=`</tr></thead><tbody>`;
         inTable=true;
         continue;
       }
-
       if(inTable){
         const isAvg=cells[0]==='평균'||cells[0].includes('평균');
         html+=`<tr style="${isAvg?'background:var(--surface2);font-weight:700':''}">`;
         cells.forEach(c=>{
-          const oxColor=c==='O'?'var(--green)':c==='X'?'var(--red)':'';
-          html+=`<td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border);${oxColor?`color:${oxColor};font-weight:700`:''}">${esc(c)}</td>`;
+          const isO=c==='O',isX=c==='X';
+          const style=isO?'color:var(--green);font-weight:700':isX?'color:var(--red);font-weight:700':'';
+          html+=`<td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border);${style}">${isO?'✅':isX?'❌':esc(c)}</td>`;
         });
         html+=`</tr>`;
         continue;
       }
     }
 
-    // 파이프 표 다음 일반 줄 → 표 닫기
-    if(inTable){closeTable();}
+    if(inTable&&!/^\|/.test(trimmed)){closeTable();}
 
     // 빈 줄
-    if(!trimmed){html+=`<div style="height:6px"></div>`;continue;}
+    if(!trimmed){
+      closeFeedback();closeStudent();
+      html+=`<div style="height:5px"></div>`;
+      continue;
+    }
 
-    // 일반 텍스트
-    closeScoreGrid();
-    html+=`<div style="font-size:13px;color:var(--text);line-height:1.8">${esc(trimmed)}</div>`;
+    // 정답/정오답 단독 값 (▶1, ▶2 섹션의 값)
+    if(curSection.includes('정답')&&!curSection.includes('정오답')&&/^[①②③④⑤]/.test(trimmed)){
+      html+=`<div style="font-size:20px;font-weight:700;color:var(--accent);padding:4px 0 2px">${esc(trimmed)}</div>`;
+      continue;
+    }
+    if(curSection.includes('정오답')){
+      const isO=trimmed==='O'||trimmed==='o';
+      const isX=trimmed==='X'||trimmed==='x';
+      if(isO||isX){
+        html+=`<div style="display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:6px;background:${isO?'#dcfce7':'#fee2e2'};margin-top:2px">`;
+        html+=`<span style="font-size:16px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'O':'X'}</span>`;
+        html+=`<span style="font-size:12px;color:${isO?'var(--green)':'var(--red)'}">${isO?'정답':'오답'}</span>`;
+        html+=`</div>`;
+        continue;
+      }
+    }
+
+    // 총평 섹션 텍스트 (강점/보완/학습방향)
+    closeScoreGrid();closeFeedback();closeStudent();
+    html+=`<div style="font-size:13px;color:var(--text);line-height:1.85;padding:2px 0">${esc(trimmed)}</div>`;
   }
 
   closeCard();
-  container.innerHTML=html||`<div class="prob-card"><div style="padding:16px 18px;font-size:13px;color:var(--text2)">결과가 없습니다.</div></div>`;
+  container.innerHTML=html||`<div class="prob-card"><div style="padding:16px 20px;font-size:13px;color:var(--text2)">결과가 없습니다.</div></div>`;
 }
+
 
 async function downloadPDF(){
   const btn=document.getElementById('pdfBtn');
