@@ -1275,7 +1275,7 @@ ${ANALYSIS_RETRY_SYSTEM}`,buildAnalysisParts(extractedRaw,studentOcrText),{model
     const mergedText=mergeExtractedSolutions(analysisText,solutionMap);
     renderResult(mergedText,rc);
   }catch(e){
-    rc.innerHTML=`<div class="error-box">⚠️ 오류: ${e.message}<br><small>정확도 우선 모드에서는 해설 원문과 문제 번호의 무결성을 먼저 검사합니다. JPG는 선명하게, PDF는 문제 단위로 나누면 정확도가 더 올라갑니다.</small></div><button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
+    rc.innerHTML=`<div class="error-box">⚠️ 오류: ${e.message.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim()}<br><small>quota 초과라면 1~2분 후 다시 시도해주세요. 해설 이미지가 많다면 문제 단위로 나눠 올리면 정확도가 올라갑니다.</small></div><button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
   }finally{
     const lw=rc.querySelector('.loading-wrap');
     if(lw)lw.remove();
