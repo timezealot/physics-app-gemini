@@ -785,9 +785,7 @@ async function analyze(){
       setMsg('JSON 변환 재시도 중...<br><span class="small muted">응답 형식을 교정하고 있습니다</span>');
       await sleep(5000);
       const retryParts=[
-        {type:'text', text:'아래 텍스트에서 JSON 객체만 추출해 그대로 출력하세요. 설명이나 코드펜스 없이 { 로 시작하고 } 로 끝나는 JSON만 출력합니다.
-
-' + analysisRaw.slice(0,8000)}
+        {type:'text', text:'아래 텍스트에서 JSON 객체만 추출해 그대로 출력하세요. 설명이나 코드펜스 없이 { 로 시작하고 } 로 끝나는 JSON만 출력합니다.\n\n' + analysisRaw.slice(0,8000)}
       ];
       const retryRaw=await callProxy({parts:retryParts, system:'JSON 객체만 출력. 첫 글자는 반드시 {. 마크다운 금지.', model:MODEL.analysis});
       analysisData=robustJsonParse(retryRaw);
