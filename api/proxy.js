@@ -92,7 +92,14 @@ export default async function handler(req, res) {
         return res.status(apiRes.status).json({ error: { message: errMsg }, retryAfter });
       }
       let text = '';
-      try { const d = JSON.parse(resText); text = d.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || ''; } catch {}
+      try {
+        const d = JSON.parse(resText);
+        // thinking 파트 제외, text 파트만 병합
+        text = d.candidates?.[0]?.content?.parts
+          ?.filter(p => p.text !== undefined && !p.thought)
+          .map(p => p.text || '')
+          .join('') || '';
+      } catch {}
       return res.status(200).json({ content: [{ type: 'text', text }] });
     }
 
@@ -125,7 +132,10 @@ export default async function handler(req, res) {
           if (!d || d === '[DONE]') continue;
           try {
             const j = JSON.parse(d);
-            const text = j.candidates?.[0]?.content?.parts?.map(p => p.text || '').join('') || '';
+            const text = j.candidates?.[0]?.content?.parts
+              ?.filter(p => p.text !== undefined && !p.thought)
+              .map(p => p.text || '')
+              .join('') || '';
             if (text) res.write(`data: ${JSON.stringify({ type: 'content_block_delta', delta: { type: 'text_delta', text } })}\n\n`);
           } catch {}
         }
