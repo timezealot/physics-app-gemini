@@ -1,1312 +1,669 @@
 <!DOCTYPE html>
 <html lang="ko">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>물리1 풀이 분석기</title>
-<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>물리 풀이 분석기 - 요구사항 반영판</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
 :root{
-  --bg:#f4f3ef;
-  --surface:#ffffff;
-  --surface2:#f0efe9;
-  --border:#e3e1d9;
-  --accent:#2563eb;
-  --accent-light:#dbeafe;
-  --green:#16a34a;
-  --green-light:#dcfce7;
-  --red:#dc2626;
-  --red-light:#fee2e2;
-  --yellow:#d97706;
-  --yellow-light:#fef9c3;
-  --blue:#0369a1;
-  --blue-light:#e0f2fe;
-  --text:#1a1917;
-  --text2:#6b6860;
-  --text3:#a8a49e;
-  --shadow:0 1px 3px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.04);
-  --shadow-lg:0 4px 24px rgba(0,0,0,.10);
+  --bg:#f4f3ef;--surface:#fff;--surface2:#f0efe9;--border:#e3e1d9;
+  --accent:#2563eb;--accent-light:#dbeafe;--green:#16a34a;--yellow:#d97706;--red:#dc2626;
+  --text:#1a1917;--text2:#6b6860;--text3:#a8a49e;--shadow:0 1px 3px rgba(0,0,0,.07),0 4px 16px rgba(0,0,0,.04);
 }
-*{box-sizing:border-box;margin:0;padding:0;}
-body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;font-size:14px;line-height:1.7;}
-
-/* ── 헤더 ── */
-.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;box-shadow:var(--shadow);}
-.header-left{display:flex;align-items:center;gap:12px;}
-.logo{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900;flex-shrink:0;}
-.header-title{font-size:15px;font-weight:700;}
-.header-sub{font-size:11px;color:var(--text3);}
-.api-wrap{display:flex;align-items:center;gap:8px;}
-.api-label{font-size:11px;color:var(--text2);white-space:nowrap;}
-.api-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 10px;outline:none;width:200px;transition:border-color .15s;}
-.api-input:focus{border-color:var(--accent);}
-@media(max-width:600px){.api-input{width:120px;}.header-sub{display:none;}}
-
-/* ── 컨테이너 ── */
-.container{max-width:900px;margin:0 auto;padding:20px 16px 120px;}
-
-/* ── 입력 카드 ── */
-.input-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:14px;}
-.input-card-header{padding:11px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);display:flex;align-items:center;justify-content:space-between;}
-.upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;}
-@media(max-width:600px){.upload-grid{grid-template-columns:1fr;}}
-.upload-zone{background:var(--surface);border:1px solid var(--border);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);}
-.upload-zone-header{padding:10px 14px;background:var(--surface2);border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
-.upload-zone-title{font-size:12px;font-weight:700;color:var(--text2);}
-.upload-drop{padding:18px 12px;text-align:center;cursor:pointer;transition:background .12s;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;}
-.upload-drop:hover{background:var(--accent-light);}
-.upload-drop-icon{font-size:24px;}
-.upload-drop-text{font-size:12px;color:var(--text2);}
-.upload-drop-sub{font-size:10px;color:var(--text3);}
-.upload-file-input{display:none;}
-.preview-grid{padding:10px 12px;display:flex;flex-wrap:wrap;gap:7px;}
-.img-wrap{position:relative;display:inline-block;}
-.img-thumb{width:72px;height:72px;object-fit:cover;border-radius:7px;border:1px solid var(--border);display:block;cursor:pointer;transition:transform .1s;}
-.img-thumb:hover{transform:scale(1.05);}
-.pdf-thumb{width:72px;height:72px;border-radius:7px;border:1px solid var(--border);background:var(--surface2);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:20px;}
-.pdf-thumb-name{font-size:8px;color:var(--text2);text-align:center;padding:0 3px;word-break:break-all;max-width:68px;}
-.img-remove{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border-radius:50%;background:var(--red);border:none;color:#fff;font-size:10px;cursor:pointer;display:flex;align-items:center;justify-content:center;}
-.img-name{font-size:9px;color:var(--text3);text-align:center;margin-top:2px;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
-.add-btn{width:72px;height:72px;border:2px dashed var(--border);border-radius:7px;display:flex;align-items:center;justify-content:center;font-size:20px;cursor:pointer;color:var(--text3);background:transparent;transition:all .12s;}
-.add-btn:hover{border-color:var(--accent);color:var(--accent);}
-.img-badge{background:var(--accent-light);color:var(--accent);border-radius:4px;padding:1px 6px;font-size:10px;font-family:'JetBrains Mono',monospace;}
-.zone-textarea{width:100%;background:transparent;border:none;border-top:1px solid var(--border);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:12px;line-height:1.7;padding:10px 14px;resize:vertical;min-height:56px;outline:none;}
-.zone-textarea::placeholder{color:var(--text3);}
-
-/* ── 정답 입력 ── */
-.answer-grid{display:grid;gap:6px;margin-top:8px;}
-.answer-grid{display:flex;flex-direction:column;gap:10px;}
-.answer-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px;}
-.answer-num{font-size:12px;font-weight:700;color:var(--text2);width:32px;flex-shrink:0;}
-.answer-btns{display:flex;gap:4px;flex-wrap:wrap;}
-.ans-btn{width:30px;height:30px;border-radius:6px;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);font-size:13px;cursor:pointer;transition:all .1s;display:flex;align-items:center;justify-content:center;}
-.ans-btn:hover{border-color:var(--accent);color:var(--accent);}
-.ans-btn.selected-correct{background:var(--accent);color:#fff;border-color:var(--accent);}
-.ans-btn.selected-student{background:var(--surface2);color:var(--text);border-color:var(--text2);font-weight:700;}
-.count-btns{display:flex;gap:4px;flex-wrap:wrap;}
-.count-btn{width:28px;height:28px;border-radius:5px;border:1.5px solid var(--border);background:var(--surface2);color:var(--text2);font-size:11px;cursor:pointer;transition:all .1s;}
-.count-btn:hover{border-color:var(--accent);color:var(--accent);}
-.count-btn.active{background:var(--accent);color:#fff;border-color:var(--accent);}
-
-/* ── 분석 버튼 ── */
-.analyze-wrap{position:fixed;bottom:0;left:0;right:0;padding:14px 16px;background:linear-gradient(to top,var(--bg) 70%,transparent);display:flex;justify-content:center;z-index:100;}
-.analyze-btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px 40px;font-family:'Noto Sans KR',sans-serif;font-size:15px;font-weight:700;cursor:pointer;width:100%;max-width:460px;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px;box-shadow:0 4px 16px rgba(37,99,235,.35);}
-.analyze-btn:hover:not(:disabled){background:#1d4ed8;transform:translateY(-1px);}
-.analyze-btn:disabled{opacity:.6;cursor:not-allowed;transform:none;}
-
-/* ── 결과 화면 ── */
-.result-section{display:none;}
-.result-section.visible{display:block;}
-.result-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;}
-.result-title{font-size:16px;font-weight:700;}
-.result-actions{display:flex;gap:8px;}
-.back-btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-family:'Noto Sans KR',sans-serif;font-size:12px;padding:7px 14px;cursor:pointer;transition:all .12s;}
-.back-btn:hover{border-color:var(--accent);color:var(--accent);}
-.pdf-btn{background:var(--accent);border:none;border-radius:8px;color:#fff;font-family:'Noto Sans KR',sans-serif;font-size:12px;font-weight:600;padding:7px 14px;cursor:pointer;transition:all .12s;}
-.pdf-btn:hover{background:#1d4ed8;}
-.pdf-btn:disabled{opacity:.6;cursor:not-allowed;}
-
-/* ── 결과 카드 ── */
-.prob-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;margin-bottom:16px;overflow:hidden;box-shadow:var(--shadow);}
-.prob-card-header{padding:13px 20px;border-bottom:1px solid var(--border);background:var(--surface2);display:flex;align-items:center;justify-content:space-between;}
-.prob-card-title{font-size:14px;font-weight:700;}
-.prob-card-body{padding:18px 20px 20px;}
-.total-card{background:var(--surface);border:2px solid var(--text);border-radius:14px;margin-top:20px;overflow:hidden;box-shadow:var(--shadow-lg);}
-.total-card-header{padding:15px 20px;background:var(--text);color:#fff;font-size:14px;font-weight:700;display:flex;align-items:center;gap:8px;}
-.total-card-body{padding:18px 20px 20px;}
-
-/* ── 섹션 라벨 ── */
-.sec-label{display:flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;margin:16px 0 8px;}
-.sec-label:first-child{margin-top:0;}
-.sec-bar{width:3px;height:13px;border-radius:2px;flex-shrink:0;}
-
-/* ── 정답/정오답 ── */
-.answer-display{font-size:22px;font-weight:700;color:var(--accent);padding:3px 0;}
-.ox-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:7px;margin-top:2px;font-weight:700;font-size:14px;}
-
-/* ── 풀이 단계 ── */
-.step-wrap{display:flex;flex-direction:column;gap:5px;margin-top:4px;}
-.step-row{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:8px;padding:9px 13px;}
-.step-num{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-light);min-width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0;}
-.step-text{font-size:13px;color:var(--text);line-height:1.65;}
-
-/* ── 학생 풀이 박스 ── */
-.student-box{background:#fafaf9;border:1px solid var(--border);border-radius:9px;padding:12px 15px;margin-top:4px;display:flex;flex-direction:column;gap:5px;}
-.student-row{font-size:13px;color:var(--text);line-height:1.75;}
-.student-label{font-weight:600;color:var(--text2);}
-
-/* ── 피드백 박스 ── */
-.feedback-box{background:var(--blue-light);border:1px solid #bae6fd;border-radius:9px;padding:12px 15px;margin-top:4px;display:flex;flex-direction:column;gap:5px;}
-.feedback-row{font-size:13px;color:#0c4a6e;line-height:1.75;}
-.feedback-label{font-weight:700;color:#075985;}
-
-/* ── 역량 점수 ── */
-.score-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px;}
-.score-cell{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 13px;}
-.score-cell-label{font-size:10px;color:var(--text2);margin-bottom:5px;}
-.score-cell-val{font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;line-height:1;}
-.score-cell-max{font-size:9px;color:var(--text3);margin-top:2px;margin-bottom:6px;}
-.score-cell-reason{font-size:11px;color:var(--text2);line-height:1.5;border-top:1px solid var(--border);padding-top:6px;margin-top:3px;}
-.score-total{display:flex;align-items:center;justify-content:flex-end;gap:6px;margin-top:10px;padding-top:10px;border-top:2px solid var(--border);}
-.score-total-label{font-size:12px;color:var(--text2);font-weight:600;}
-.score-total-val{font-family:'JetBrains Mono',monospace;font-size:26px;font-weight:700;}
-.score-total-max{font-size:12px;color:var(--text3);}
-
-/* ── 총평 표 ── */
-.total-table-wrap{overflow-x:auto;margin:8px 0;}
-.total-table{width:100%;border-collapse:collapse;font-size:12px;}
-.total-table th{background:var(--surface2);color:var(--text2);padding:9px 12px;text-align:center;border-bottom:2px solid var(--border);font-weight:700;white-space:nowrap;}
-.total-table td{padding:8px 12px;text-align:center;border-bottom:1px solid var(--border);}
-.total-table tr.avg-row{background:var(--surface2);font-weight:700;}
-
-/* ── 총평 섹션 텍스트 ── */
-.total-section-text{font-size:13px;color:var(--text);line-height:1.85;padding:2px 0;}
-
-/* ── 로딩 ── */
-.loading-wrap{padding:48px 16px;text-align:center;}
-.loading-spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px;}
-@keyframes spin{to{transform:rotate(360deg);}}
-.loading-text{color:var(--text2);font-size:13px;line-height:1.7;}
-
-/* ── 오류 박스 ── */
-.error-box{background:var(--red-light);border:1px solid #fca5a5;border-radius:10px;padding:14px 16px;color:var(--red);font-size:13px;margin-bottom:12px;line-height:1.6;}
-
-/* ── 라이트박스 ── */
-.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.87);z-index:999;align-items:center;justify-content:center;}
-.lightbox.open{display:flex;}
-.lightbox img{max-width:92vw;max-height:92vh;border-radius:8px;}
-.lightbox-close{position:absolute;top:18px;right:22px;color:#fff;font-size:28px;cursor:pointer;background:none;border:none;}
-
-/* ── 스트림 텍스트 ── */
-.stream-text{font-size:13px;color:var(--text);line-height:1.8;white-space:pre-wrap;word-break:keep-all;}
-
-/* ── 일반 텍스트 ── */
-.plain-text{font-size:13px;color:var(--text);line-height:1.85;}
-.bullet-row{font-size:13px;color:var(--text);line-height:1.8;padding:3px 0 3px 14px;border-left:2px solid var(--border);margin-bottom:2px;}
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'Noto Sans KR',sans-serif;min-height:100vh;font-size:14px;line-height:1.7}
+.header{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:58px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:20;box-shadow:var(--shadow)}
+.header-left{display:flex;align-items:center;gap:12px}.logo{width:32px;height:32px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:15px;font-weight:900}.header-title{font-size:15px;font-weight:700}.header-sub{font-size:11px;color:var(--text3)}
+.api-wrap{display:flex;align-items:center;gap:8px}.api-input{background:var(--surface2);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:'JetBrains Mono',monospace;font-size:11px;padding:6px 10px;outline:none;width:220px}
+.container{max-width:960px;margin:0 auto;padding:20px 16px 120px}
+.card,.upload-zone,.result-card,.warn-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;box-shadow:var(--shadow);margin-bottom:14px}
+.card-header,.zone-header{padding:11px 16px;background:var(--surface2);border-bottom:1px solid var(--border);font-size:12px;font-weight:700;color:var(--text2);display:flex;align-items:center;justify-content:space-between}
+.card-body{padding:12px 16px}
+.upload-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px}
+@media(max-width:760px){.upload-grid{grid-template-columns:1fr}.api-input{width:140px}.header-sub{display:none}}
+.drop{padding:18px 12px;text-align:center;cursor:pointer;transition:background .12s;min-height:100px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px}
+.drop:hover{background:var(--accent-light)}
+.file-input{display:none}.preview-grid{padding:10px 12px;display:flex;flex-wrap:wrap;gap:7px}.thumb-wrap{position:relative;display:inline-block}.thumb{width:72px;height:72px;object-fit:cover;border-radius:7px;border:1px solid var(--border);display:block;cursor:pointer}.pdf-thumb{width:72px;height:72px;border-radius:7px;border:1px solid var(--border);display:flex;align-items:center;justify-content:center;background:var(--surface2);font-size:22px}.file-remove{position:absolute;top:-5px;right:-5px;width:16px;height:16px;border:none;border-radius:50%;background:var(--red);color:#fff;cursor:pointer;font-size:10px}.file-name{font-size:9px;color:var(--text3);text-align:center;margin-top:2px;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.badge{background:var(--accent-light);color:var(--accent);border-radius:4px;padding:1px 6px;font-size:10px;font-family:'JetBrains Mono',monospace}
+textarea{width:100%;background:transparent;border:none;border-top:1px solid var(--border);color:var(--text);font-family:'Noto Sans KR',sans-serif;font-size:12px;line-height:1.7;padding:10px 14px;resize:vertical;min-height:56px;outline:none}
+textarea::placeholder{color:var(--text3)}
+.answer-grid{display:flex;flex-direction:column;gap:10px}.answer-row{display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--surface2);border-radius:8px}.answer-num{font-size:12px;font-weight:700;color:var(--text2);width:36px}.answer-btns{display:flex;gap:4px;flex-wrap:wrap}.ans-btn,.count-btn{cursor:pointer;border:1.5px solid var(--border);background:var(--surface);color:var(--text2);transition:all .1s}.ans-btn{width:30px;height:30px;border-radius:6px;font-size:13px}.ans-btn.sel-c{background:var(--accent);border-color:var(--accent);color:#fff}.ans-btn.sel-s{background:#111827;border-color:#111827;color:#fff}.count-btns{display:flex;gap:4px;flex-wrap:wrap}.count-btn{width:28px;height:28px;border-radius:5px;background:var(--surface2);font-size:11px}.count-btn.active{background:var(--accent);border-color:var(--accent);color:#fff}
+.bottom-bar{position:fixed;bottom:0;left:0;right:0;padding:14px 16px;background:linear-gradient(to top,var(--bg) 70%,transparent);display:flex;justify-content:center;z-index:10}.analyze-btn{background:var(--accent);color:#fff;border:none;border-radius:12px;padding:14px 40px;font-family:'Noto Sans KR',sans-serif;font-size:15px;font-weight:700;cursor:pointer;width:100%;max-width:460px;box-shadow:0 4px 16px rgba(37,99,235,.35)}.analyze-btn:disabled{opacity:.65;cursor:not-allowed}
+.result-section{display:none}.result-section.visible{display:block}.result-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}.result-actions{display:flex;gap:8px}.btn{background:var(--surface);border:1px solid var(--border);border-radius:8px;color:var(--text2);font-size:12px;padding:7px 14px;cursor:pointer}.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.result-card-header{padding:13px 18px;border-bottom:1px solid var(--border);background:var(--surface2);font-size:14px;font-weight:700}.result-card-body{padding:16px 18px}.sec{margin-top:14px}.sec:first-child{margin-top:0}.sec-title{font-size:11px;font-weight:700;color:var(--text2);letter-spacing:.06em;text-transform:uppercase;margin-bottom:6px}.step{display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:8px;padding:9px 13px;margin-bottom:6px}.step-num{font-family:'JetBrains Mono',monospace;font-size:11px;font-weight:700;color:var(--accent);background:var(--accent-light);min-width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center}.mono{font-family:'JetBrains Mono',monospace}.muted{color:var(--text2)}.small{font-size:12px}.box{background:#fafaf9;border:1px solid var(--border);border-radius:9px;padding:12px 14px}.warn-card{border-color:#f59e0b;background:#fffbeb}.warn-body{padding:12px 14px;color:#92400e}
+.score-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}@media(max-width:760px){.score-grid{grid-template-columns:repeat(2,1fr)}}.score-cell{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:12px 13px}.score-label{font-size:10px;color:var(--text2)}.score-val{font-family:'JetBrains Mono',monospace;font-size:22px;font-weight:700}.score-reason{font-size:11px;color:var(--text2);line-height:1.5;border-top:1px solid var(--border);margin-top:6px;padding-top:6px}
+.table-wrap{overflow-x:auto}.table{width:100%;border-collapse:collapse;font-size:12px}.table th{background:var(--surface2);padding:9px 12px;text-align:center;border-bottom:2px solid var(--border)}.table td{padding:8px 12px;text-align:center;border-bottom:1px solid var(--border)}
+.loading{padding:48px 16px;text-align:center}.spinner{width:40px;height:40px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin .7s linear infinite;margin:0 auto 14px}@keyframes spin{to{transform:rotate(360deg)}}
+.error{background:#fee2e2;border:1px solid #fca5a5;border-radius:10px;padding:14px 16px;color:#b91c1c;font-size:13px;line-height:1.6}
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,.87);z-index:99;align-items:center;justify-content:center}.lightbox.open{display:flex}.lightbox img{max-width:92vw;max-height:92vh;border-radius:8px}.lightbox-close{position:absolute;top:18px;right:22px;color:#fff;font-size:28px;cursor:pointer;background:none;border:none}
 </style>
 </head>
 <body>
-
 <div class="header">
   <div class="header-left">
     <div class="logo">⚡</div>
     <div>
-      <div class="header-title">물리1 풀이 분석기</div>
-      <div class="header-sub">Gemini AI 기반 역량 피드백</div>
+      <div class="header-title">물리 풀이 분석기</div>
+      <div class="header-sub">클라이언트 요구사항 반영판</div>
     </div>
   </div>
   <div class="api-wrap">
-    <button id="mockToggle" onclick="toggleMock()" style="background:var(--surface2);border:1.5px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;font-family:'Noto Sans KR',sans-serif;color:var(--text2);cursor:pointer;font-weight:600;">🧪 목업 OFF</button>
-    <span class="api-label">🔑 API Key</span>
-    <input class="api-input" type="password" id="apiKey" placeholder="AIza... (Google AI Studio)"/>
+    <button id="mockToggle" class="btn" onclick="toggleMock()">🧪 목업 OFF</button>
+    <input class="api-input" type="password" id="apiKey" placeholder="AIza... (Google AI Studio)">
   </div>
 </div>
-
-<div id="mockBanner" style="display:none;background:#fef3c7;border-bottom:1px solid #fde68a;padding:8px 20px;text-align:center;font-size:12px;color:#92400e;font-weight:600;">
-  🧪 목업 모드 — API 호출 없이 샘플 결과를 표시합니다
-</div>
-
-<div class="lightbox" id="lightbox" onclick="closeLightbox()">
-  <button class="lightbox-close">×</button>
-  <img id="lightboxImg" src="" alt=""/>
-</div>
-
+<div id="mockBanner" style="display:none;background:#fef3c7;border-bottom:1px solid #fde68a;padding:8px 20px;text-align:center;font-size:12px;color:#92400e;font-weight:600;">🧪 목업 모드 — 실제 API 호출 없이 샘플 결과를 생성합니다</div>
+<div class="lightbox" id="lightbox" onclick="closeLightbox()"><button class="lightbox-close">×</button><img id="lightboxImg" src="" alt=""></div>
 <div class="container">
   <div id="inputView">
-
-    <!-- 문제 범위 -->
-    <div class="input-card">
-      <div class="input-card-header">📌 분석할 문제 범위 (선택)</div>
-      <div style="padding:12px 16px;">
-        <textarea id="bulk-range" class="zone-textarea" style="border-top:none;min-height:44px;" placeholder="예: 5번~9번 문제 / 비워두면 이미지에서 자동으로 모든 문제를 찾습니다"></textarea>
-      </div>
+    <div class="card">
+      <div class="card-header">📌 분석 범위 (선택)</div>
+      <div class="card-body"><textarea id="rangeText" style="border-top:none;min-height:44px" placeholder="예: 3번~6번 / 또는 비워두기"></textarea></div>
     </div>
 
-    <!-- 정답 입력 -->
-    <div class="input-card">
-      <div class="input-card-header">
-        <span>✅ 정답 입력 (선택 — 입력하면 정확도가 크게 올라갑니다)</span>
+    <div class="card">
+      <div class="card-header">
+        <span>✅ 정답 / 학생 선택 입력</span>
         <div class="count-btns" id="countBtns"></div>
       </div>
-      <div style="padding:12px 16px;">
+      <div class="card-body">
         <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px;padding:0 10px;">
-          <span style="width:32px;flex-shrink:0;"></span>
-          <span style="font-size:10px;font-weight:700;color:var(--accent);letter-spacing:.04em;">정답 ①②③④⑤</span>
-          <span style="width:1px;height:14px;background:var(--border);flex-shrink:0;"></span>
-          <span style="font-size:10px;font-weight:700;color:var(--text2);letter-spacing:.04em;">학생 선택 ①②③④⑤</span>
+          <span style="width:36px"></span>
+          <span style="font-size:10px;font-weight:700;color:var(--accent)">정답</span>
+          <span style="width:1px;height:14px;background:var(--border)"></span>
+          <span style="font-size:10px;font-weight:700;color:var(--text2)">학생 선택</span>
         </div>
-        <div id="answerGrid"></div>
+        <div id="answerGrid" class="answer-grid"></div>
       </div>
     </div>
 
-    <!-- 파일 업로드 3칸 -->
+    <div class="warn-card">
+      <div class="warn-body">
+        <b>권장 입력 규칙</b><br>
+        1) 해설은 가능한 한 문제번호가 보이게 올리기<br>
+        2) 학생 풀이 사진은 그림·화살표·거리 표기가 잘 보이게 촬영하기<br>
+        3) 수동 정답/학생선택을 입력하면 OX 판단은 코드가 강제로 고정합니다<br>
+        4) 해설 OCR 결과가 너무 짧거나 식이 거의 없으면 해당 문제는 자동 제외됩니다
+      </div>
+    </div>
+
     <div class="upload-grid">
-      <!-- 문제 -->
       <div class="upload-zone">
-        <div class="upload-zone-header">
-          <span class="upload-zone-title">📝 문제 사진/PDF</span>
-          <span class="img-badge" id="badge-q" style="display:none"></span>
-        </div>
-        <label class="upload-drop" for="file-q">
-          <span class="upload-drop-icon">📷</span>
-          <span class="upload-drop-text">사진 / PDF 추가</span>
-          <span class="upload-drop-sub">여러 파일 OK</span>
-        </label>
-        <input class="upload-file-input" type="file" id="file-q" accept="image/*,application/pdf" multiple onchange="handleUpload('q',this)"/>
+        <div class="zone-header"><span>📝 문제 사진/PDF</span><span class="badge" id="badge-q" style="display:none"></span></div>
+        <label class="drop" for="file-q"><div style="font-size:24px">📷</div><div>사진 / PDF 추가</div><div class="small muted">여러 파일 가능</div></label>
+        <input class="file-input" type="file" id="file-q" accept="image/*,application/pdf" multiple onchange="handleUpload('q',this)">
         <div class="preview-grid" id="preview-q"></div>
-        <textarea class="zone-textarea" id="text-q" placeholder="또는 텍스트 직접 입력"></textarea>
+        <textarea id="text-q" placeholder="또는 문제 텍스트 직접 입력"></textarea>
       </div>
-      <!-- 해설 -->
       <div class="upload-zone">
-        <div class="upload-zone-header">
-          <span class="upload-zone-title">📖 해설 사진/PDF</span>
-          <span class="img-badge" id="badge-a" style="display:none"></span>
-        </div>
-        <label class="upload-drop" for="file-a">
-          <span class="upload-drop-icon">📷</span>
-          <span class="upload-drop-text">사진 / PDF 추가</span>
-          <span class="upload-drop-sub">가장 중요합니다</span>
-        </label>
-        <input class="upload-file-input" type="file" id="file-a" accept="image/*,application/pdf" multiple onchange="handleUpload('a',this)"/>
+        <div class="zone-header"><span>📖 해설 사진/PDF</span><span class="badge" id="badge-a" style="display:none"></span></div>
+        <label class="drop" for="file-a"><div style="font-size:24px">📷</div><div>사진 / PDF 추가</div><div class="small muted">가장 중요합니다</div></label>
+        <input class="file-input" type="file" id="file-a" accept="image/*,application/pdf" multiple onchange="handleUpload('a',this)">
         <div class="preview-grid" id="preview-a"></div>
-        <textarea class="zone-textarea" id="text-a" placeholder="또는 텍스트 직접 입력"></textarea>
+        <textarea id="text-a" placeholder="또는 해설 텍스트 직접 입력"></textarea>
       </div>
-      <!-- 학생 풀이 -->
       <div class="upload-zone">
-        <div class="upload-zone-header">
-          <span class="upload-zone-title">✏️ 학생 풀이 사진</span>
-          <span class="img-badge" id="badge-s" style="display:none"></span>
-        </div>
-        <label class="upload-drop" for="file-s">
-          <span class="upload-drop-icon">📷</span>
-          <span class="upload-drop-text">사진 / PDF 추가</span>
-          <span class="upload-drop-sub">손글씨 OK</span>
-        </label>
-        <input class="upload-file-input" type="file" id="file-s" accept="image/*,application/pdf" multiple onchange="handleUpload('s',this)"/>
+        <div class="zone-header"><span>✏️ 학생 풀이 사진/PDF</span><span class="badge" id="badge-s" style="display:none"></span></div>
+        <label class="drop" for="file-s"><div style="font-size:24px">📷</div><div>사진 / PDF 추가</div><div class="small muted">손글씨 / 그림 포함</div></label>
+        <input class="file-input" type="file" id="file-s" accept="image/*,application/pdf" multiple onchange="handleUpload('s',this)">
         <div class="preview-grid" id="preview-s"></div>
-        <textarea class="zone-textarea" id="text-s" placeholder="또는 텍스트 직접 입력"></textarea>
+        <textarea id="text-s" placeholder="또는 학생 풀이 텍스트 직접 입력"></textarea>
       </div>
     </div>
+  </div>
 
-  </div><!-- #inputView -->
-
-  <!-- 결과 화면 -->
   <div id="resultView" class="result-section">
     <div class="result-header">
-      <div class="result-title">📊 분석 결과</div>
+      <div style="font-size:16px;font-weight:700">📊 분석 결과</div>
       <div class="result-actions">
-        <button class="pdf-btn" id="pdfBtn" onclick="downloadPDF()">⬇ PDF 저장</button>
-        <button class="back-btn" onclick="goBack()">← 다시 입력</button>
+        <button class="btn primary" onclick="downloadPDF()">⬇ PDF 저장</button>
+        <button class="btn" onclick="goBack()">← 다시 입력</button>
       </div>
     </div>
     <div id="resultContent"></div>
   </div>
 </div>
-
-<div class="analyze-wrap" id="analyzeWrap">
-  <button class="analyze-btn" id="analyzeBtn" onclick="analyze()">⚡ 풀이 분석 시작</button>
-</div>
+<div class="bottom-bar" id="bottomBar"><button class="analyze-btn" id="analyzeBtn" onclick="analyze()">⚡ 풀이 분석 시작</button></div>
 
 <script>
-// ──────────────────────────────────────────────
-// 전역 상태
-// ──────────────────────────────────────────────
 const store = {q:[],a:[],s:[]};
-const correctAnswers = {};   // {문제번호: '①'...}
-const studentAnswers = {};   // {문제번호: '①'...}
+const correctAnswers = {};
+const studentAnswers = {};
 let problemCount = 5;
 let isMock = false;
 let isAnalyzing = false;
-let lastRawText = '';
+let lastRenderedHtml = '';
+let lastAnalysisJson = null;
 
-// 모델 설정
 const MODEL = {
-  ocr: 'gemini-2.5-flash-lite',       // OCR/추출용 (빠름)
-  analysis: 'gemini-2.5-flash-lite',   // 분석용
-  fallback: 'gemini-2.5-flash',        // quota 초과 시 fallback
+  ocr: 'gemini-2.5-flash-lite',
+  analysis: 'gemini-2.5-flash-lite',
+  fallback: 'gemini-2.5-flash'  // quota 초과 시 상위 모델로 전환
 };
 
-// ──────────────────────────────────────────────
-// MOCK 데이터
-// ──────────────────────────────────────────────
-const MOCK_RESPONSE = `=====
-문제 5 피드백
-=====
-▶ 1. 정답
-③
-▶ 2. 정오답 판단
-X
-▶ 3. 문제 풀이법
-1단계: 받침점 기준 돌림힘 평형 조건 적용 — 시계 방향 합 = 반시계 방향 합
-2단계: 각 힘의 작용점 파악 — F(반시계, d), 나무판 20N(시계, 4d), 물체 50N(시계, 9d)
-3단계: F x d = 20N x 4d + 50N x 9d = 80d + 450d = 530d
-4단계: F = 530N → 정답 ③
-▶ 4. 학생 풀이 정리
-- 학생이 세운 식: F x d = 50N x 9d = 450d
-- 학생의 계산 과정: F x d = 450d
-- 학생의 최종 답: F = 450N
-▶ 5. 풀이 피드백
-- 해설 기준 평가: 해설은 F x d = 20N x 4d + 50N x 9d = 530d인데, 학생은 나무판 무게(20N) 항을 누락하고 F x d = 450d로만 계산했습니다.
-- 개선점: 풀이 전 모든 작용점(F, 나무판, 물체)을 먼저 나열한 뒤 식을 세우세요.
-▶ 6. 역량 점수
-- 개념 이해도: 7점 / 10점 | 이유: 돌림힘 개념은 알지만 모든 작용점 적용이 미흡합니다.
-- 풀이 전개력: 6점 / 10점 | 이유: 식 구조는 맞으나 항 누락으로 오답 전개되었습니다.
-- 문제 해석력: 5점 / 10점 | 이유: 나무판 무게중심 위치(4d) 조건의 의미를 파악하지 못했습니다.
-- 합계: 18점 / 30점
-=====
-문제 6 피드백
-=====
-▶ 1. 정답
-①
-▶ 2. 정오답 판단
-O
-▶ 3. 문제 풀이법
-1단계: 각 막대에 작용하는 힘 분석 (중력, 장력)
-2단계: 돌림힘 평형 조건 적용 Στ = 0
-3단계: mg x L = F x 2L → F = mg/2
-▶ 4. 학생 풀이 정리
-- 학생이 세운 식: Στ = 0, F = mg/2
-- 학생의 계산 과정: mg × L = F × 2L
-- 학생의 최종 답: F = mg/2
-▶ 5. 풀이 피드백
-- 해설 기준 평가: 해설과 동일한 접근으로 정확하게 풀었습니다.
-- 개선점: 없음.
-▶ 6. 역량 점수
-- 개념 이해도: 10점 / 10점 | 이유: 만점
-- 풀이 전개력: 10점 / 10점 | 이유: 만점
-- 문제 해석력: 10점 / 10점 | 이유: 만점
-- 합계: 30점 / 30점
-=====
-총평
-=====
-▶ 전체 점수표
-| 문제 | 정오답 | 개념 이해도 | 풀이 전개력 | 문제 해석력 | 합계 |
-|------|--------|-----------|-----------|-----------|------|
-| 5번 | X | 7/10 | 6/10 | 5/10 | 18/30 |
-| 6번 | O | 10/10 | 10/10 | 10/10 | 30/30 |
-| 평균 | - | 8.5 | 8.0 | 7.5 | 24.0/30 |
-▶ 강점
-6번에서 돌림힘 평형 조건을 정확히 적용했습니다.
-▶ 보완할 점
-여러 물체가 등장할 때 모든 작용점을 빠짐없이 고려하는 연습이 필요합니다.
-▶ 학습 방향
-힘 목록 → 거리 정리 → 평형 식 수립 순서를 고정하세요.`;
+const MOCK_JSON = {
+  problems:[
+    {
+      number:1,answer:'③',judgement:'오류 있음',
+      solution_steps:['받침점 기준 돌림힘 평형 조건 적용','F×d = 20N×4d + 50N×9d','F×d = 530d','F = 530N → 정답 ③'],
+      student_summary:{equation:'F×d = 50N×9d',calculation:'F×d = 450d',drawing:'받침점과 물체 힘은 표시했으나 나무판 무게 화살표 누락',final_answer:'③'},
+      feedback:{evaluation:'2단계에서 해설과 풀이가 다릅니다. 학생 식은 F×d = 50N×9d이고 해설 식은 F×d = 20N×4d + 50N×9d입니다. 나무판 무게 항이 빠졌습니다.',improvement:'작용하는 힘을 먼저 모두 적은 뒤 각 힘의 작용점 거리까지 같이 적으세요.'},
+      scores:{concept:6,concept_reason:'나무판 무게에 의한 돌림힘을 반영하지 못했습니다.',process:5,process_reason:'핵심 식 단계에서 해설과 다른 식을 사용했습니다.',interpretation:4,interpretation_reason:'그림의 힘 요소를 모두 읽지 못했습니다.'}
+    }
+  ],
+  total:{strengths:'해설의 기준점 개념은 파악하려는 시도가 보입니다.',weaknesses:'그림에 있는 힘 요소를 빠뜨리면 전체 풀이가 흔들립니다.',study_direction:'힘 목록 → 거리 목록 → 식 설정 순서로 정리하세요.'}
+};
 
-// ──────────────────────────────────────────────
-// 시스템 프롬프트
-// ──────────────────────────────────────────────
-const SYSTEM_ANALYSIS = `물리1 교사. 학생 풀이를 분석하고 피드백을 작성합니다.
-
-【풀이법(▶ 3.) — 절대 규칙】
-[해설 원문] 섹션의 내용을 수식·수치·기호 한 글자도 바꾸지 말고 "1단계: ...", "2단계: ..." 형식으로 그대로 복사하세요.
-- 해설에 없는 단계·수식·개념 추가 절대 금지
-- AI의 물리 지식으로 수정·보완·재해석 절대 금지
-- 해설이 틀려 보여도 해설 내용 그대로 씁니다
-- 분수(4L/13), 계수(3mg), 첨자(T', d1) 특히 주의
-
-【피드백(▶ 5.) — 작성 규칙】
-- 물리학1 범위 개념만 사용 (ΣF=0, Στ=0, F=ma, 운동량·충격량, 역학적에너지 보존 등)
-- 학생 풀이(▶4)와 해설(▶3)을 단계별로 비교해 구체적으로 서술
-- 학생이 쓴 식과 해설 식을 직접 대조해 차이 명시. 막연한 표현 금지.
-- 정답이고 해설과 동일 흐름이면 "해설과 동일한 접근"으로 인정
-
-공통 규칙:
-- ▶ 1. 정답: [해설 원문]에서 확인한 원문자(①②③④⑤)만. 직접 계산 금지.
-- ▶ 2. 정오답 판단: 반드시 [정답] 목록과 [학생 선택] 목록의 번호만 비교해 O 또는 X 출력. 이미지나 풀이 내용으로 추론하는 것 절대 금지. 둘 중 하나라도 없으면 "입력 필요"로 표시.
-- ▶ 3. 문제 풀이법: ㄱ,ㄴ,ㄷ 보기 문제는 "1단계: 보기 ㄱ — (내용)", "2단계: 보기 ㄴ — (내용)" 형식으로 각 보기를 단계로 표현. 문제 지문의 <보기> 텍스트를 그대로 단계 내용에 쓰지 말 것.
-- ▶ 4. 학생 풀이 정리: 학생풀이에서 식·계산·답 그대로. 추측 금지.
-- ▶ 6. 역량 점수: 해설과 비교해 해당 문제에서 실제로 보인 능력만 평가. 아래 기준 엄수:
-  * 정오답이 O(정답)이고 해설과 동일한 접근이면 세 항목 모두 반드시 8~10점.
-  * 정오답이 O이어도 접근법이 다르거나 비효율적이면 해당 항목만 부분 감점.
-  * 점수 형식: X점/10점|이유:한문장. 평가불가 금지.
-- 형식(▶ =====) 변경 금지. LaTeX 금지. 인사말 금지.`;
-
-const SYSTEM_OCR_SOLUTION = `물리1 해설지 OCR 전문가. 이미지/PDF에 있는 내용을 그대로 추출합니다.
-
-목표: 각 문제의 정답과 풀이 과정을 정확하게 텍스트로 변환.
-
-출력 형식:
-[문제1]
-정답: ①
-풀이:
-1. (해설 첫 번째 내용 그대로)
-2. (해설 두 번째 내용 그대로, 예: ΣM_A = (mg × 2L) - (T × L) = 0)
-3. (결론, 예: T = 2mg)
-
-[문제2]
-...
+const SYSTEM_OCR_SOLUTION = `당신은 고등학교 물리 해설 OCR 보조입니다.
+출력은 반드시 문제별 텍스트만 작성합니다.
 
 규칙:
-- 수식·숫자·기호를 이미지에 있는 그대로 옮길 것
-- 분수(4L/13≠13L/4), 계수(2mg≠mg), 첨자(T'≠T'', d1≠d2) 정확히
-- 정답 원문자(①②③④⑤) 반드시 포함
-- 각 문제를 [문제N] 형식으로 구분
-- 해설에 없는 내용 추가 금지
-- 각 문제 한 번만 출력`;
+- 각 문제를 [문제N]으로 시작합니다.
+- 반드시 아래 4개 항목을 순서대로 작성합니다.
+정답: ①~⑤ 중 하나
+풀이: 해설 텍스트/식/계산을 줄단위로 그대로
+그림 해석: 해설 그림에 실제로 보이는 화살표 방향, 힘 위치, 거리, 기준점, 표시 문자만 설명. 없으면 "없음"
+핵심 식: 해설에 등장하는 핵심 식을 여러 개면 세미콜론(;)으로 구분
+- 추측 금지, 보이는 것만 적기
+- LaTeX 금지
+- 해설에 없는 새 개념 추가 금지`;
 
-const SYSTEM_OCR_STUDENT = `학생 풀이 OCR 전문가. 학생 손글씨를 그대로 텍스트로 변환합니다.
-
-출력 형식:
-[문제1]
-- 식: (학생이 쓴 식 그대로)
-- 계산: (학생의 계산 과정 그대로)
-- 답: (학생의 최종 답)
-
-[문제2]
-...
+const SYSTEM_OCR_STUDENT = `당신은 학생 풀이 OCR 보조입니다.
+출력은 반드시 문제별 텍스트만 작성합니다.
 
 규칙:
-- 이미지 전체를 위→아래, 좌→우 순서로 빠짐없이 스캔
-- 문제번호는 이미지에서 읽거나 순서대로 1,2,3...으로 매기기
-- 흘려쓴 글씨도 최대한 해독
-- 진짜 아무것도 없을 때만 (풀이 없음). 읽기 어려우면 (불명확)
-- 학생의 틀린 식도 그대로. 수정·해석 금지
-- 각 문제 한 번만 출력`;
+- 각 문제를 [문제N]으로 시작합니다.
+- 반드시 아래 4개 항목을 순서대로 작성합니다.
+식: 학생이 쓴 식 그대로
+계산: 학생의 계산 과정을 그대로
+그림/도형: 학생이 실제로 그린 자유물체도, 화살표 방향, 힘 위치, 거리, 기준점, 동그라미 표시를 보이는 그대로 설명. 없으면 "없음"
+답: 학생이 마지막에 남긴 답. 모르면 "불명확"
+- 풀이가 중구난방이면 식/계산/답 조각을 최대한 모아 정리하되 추측 금지
+- 지운 내용은 무시하고 최종적으로 남아있는 내용만 반영
+- LaTeX 금지`;
 
-// FMT
-const FMT_PROBLEM = `
-=====
-문제N 피드백
-=====
-▶ 1. 정답
-(해설에서 확인한 정답 원문자)
-▶ 2. 정오답 판단
-(정답번호와 학생선택번호가 같으면 O, 다르면 X. 번호가 입력되지 않은 경우 "입력 필요")
-▶ 3. 문제 풀이법
-1단계: (해설 내용 그대로)
-2단계: (해설 내용 그대로)
-3단계: (해설 수식·수치 그대로)
-4단계: (해설의 최종 결론)
-▶ 4. 학생 풀이 정리
-- 학생이 세운 식: (학생이 쓴 식 그대로)
-- 학생의 계산 과정: (학생의 계산 그대로)
-- 학생의 최종 답: (학생의 최종 답)
-▶ 5. 풀이 피드백
-- 해설 기준 평가: (학생 풀이와 해설을 단계별로 비교)
-- 개선점: (구체적인 개선 방향)
-▶ 6. 역량 점수
-- 개념 이해도: X점 / 10점 | 이유: (한 문장)
-- 풀이 전개력: X점 / 10점 | 이유: (한 문장)
-- 문제 해석력: X점 / 10점 | 이유: (한 문장)
-- 합계: XX점 / 30점`;
+const SYSTEM_ANALYSIS = `당신은 고등학교 물리 교사입니다. 출력은 반드시 JSON 한 개만 반환합니다.
 
-const FMT_TOTAL = `
-=====
-총평
-=====
-▶ 전체 점수표
-| 문제 | 정오답 | 개념 이해도 | 풀이 전개력 | 문제 해석력 | 합계 |
-|------|--------|-----------|-----------|-----------|------|
-| N번 | O/X | X/10 | X/10 | X/10 | XX/30 |
-| 평균 | - | X.X | X.X | X.X | XX.X/30 |
-▶ 강점
-▶ 보완할 점
-▶ 학습 방향`;
+목표:
+1) 해설과 학생 풀이를 문제별로 비교
+2) 판정: "일치" / "풀이가 다름" / "오류 있음" / "입력 필요" / "분석 제외" 중 하나
+3) 수동 입력된 정답/학생선택이 있으면 그 정보를 우선 존중
+4) 그림/도형 정보(자유물체도, 힘 화살표, 기준점)를 solution_steps와 drawing에 반영
+5) 학생 풀이가 산만해도 식·계산·그림을 최대한 묶어 설명
 
-// ──────────────────────────────────────────────
-// 정답 입력 UI
-// ──────────────────────────────────────────────
-function initAnswerUI() {
-  const countEl = document.getElementById('countBtns');
-  const gridEl = document.getElementById('answerGrid');
-  countEl.innerHTML = '';
-  for (let i = 1; i <= 10; i++) {
-    const btn = document.createElement('button');
-    btn.className = 'count-btn' + (i === problemCount ? ' active' : '');
-    btn.textContent = i;
-    btn.onclick = () => { problemCount = i; initAnswerUI(); };
-    countEl.appendChild(btn);
+【피드백 작성 규칙 — 케이스별 필수 형식】
+판정이 "일치"이면:
+  evaluation: "해설과 동일한 접근으로 정확하게 풀었습니다."
+  improvement: "없음."
+
+판정이 "풀이가 다름"이면:
+  evaluation: "N단계에서 학생:[학생식] vs 해설:[해설식]. 결과는 맞았으나 논리가 다릅니다."
+  improvement: 해설 방식으로 풀 때 더 명확한 이유 한 문장.
+
+판정이 "오류 있음"이면:
+  evaluation: "N단계에서 오류 — 학생:[학생식] / 해설:[해설식]. [물리적 원인]"
+  improvement: 해당 오류를 방지하는 구체적 방법.
+
+【역량 점수 기준】
+- 판정이 "일치"이면 concept/process/interpretation 모두 8~10점.
+- 판정이 "풀이가 다름"이면 관련 항목만 6~8점, 나머지 8~10점.
+- 판정이 "오류 있음"이면 오류 발생 항목 1~6점, 이유에 틀린 식 직접 언급.
+- 추상 표현("잘못 세웠습니다") 금지. 반드시 수식 직접 대조.
+- LaTeX(\frac, \times, \tau 등) 금지. 분수=분자/분모, 곱셈=×.
+
+반드시 아래 JSON 스키마를 따르세요:
+{
+  "problems":[{
+    "number":1,
+    "answer":"①",
+    "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분석 제외",
+    "solution_steps":["..."],
+    "student_summary":{"equation":"...","calculation":"...","drawing":"...","final_answer":"..."},
+    "feedback":{"evaluation":"...","improvement":"..."},
+    "scores":{"concept":0,"concept_reason":"...","process":0,"process_reason":"...","interpretation":0,"interpretation_reason":"..."}
+  }],
+  "total":{"strengths":"...","weaknesses":"...","study_direction":"..."}
+}
+
+엄수 규칙:
+- 해설 풀이 단계는 [해설 원문]만 근거로 작성
+- 학생 요약은 [학생 풀이 OCR]만 근거로 작성
+- 그림이 있으면 반드시 drawing 또는 solution_steps에 반영
+- JSON 외 다른 문장 금지`
+
+function initAnswerUI(){
+  const countEl=document.getElementById('countBtns');
+  const gridEl=document.getElementById('answerGrid');
+  countEl.innerHTML='';
+  for(let i=1;i<=10;i++){
+    const b=document.createElement('button');
+    b.className='count-btn'+(i===problemCount?' active':'');
+    b.textContent=i;
+    b.onclick=()=>{problemCount=i;initAnswerUI();};
+    countEl.appendChild(b);
   }
-  gridEl.className = 'answer-grid';
-  gridEl.innerHTML = '';
-  const CIRCLE = ['①','②','③','④','⑤'];
-  for (let n = 1; n <= problemCount; n++) {
-    const row = document.createElement('div');
-    row.className = 'answer-row';
-    row.innerHTML = `<span class="answer-num">${n}번</span>`;
-    // 정답 버튼
-    const corrWrap = document.createElement('div');
-    corrWrap.className = 'answer-btns';
-    corrWrap.title = '정답(파란색)';
-    CIRCLE.forEach(c => {
-      const b = document.createElement('button');
-      b.className = 'ans-btn' + (correctAnswers[n] === c ? ' selected-correct' : '');
-      b.textContent = c;
-      b.onclick = () => {
-        if (correctAnswers[n] === c) delete correctAnswers[n]; else correctAnswers[n] = c;
-        initAnswerUI();
-      };
-      corrWrap.appendChild(b);
-    });
-    // 구분선
-    const divider = document.createElement('div');
-    divider.style.cssText = 'width:1px;height:20px;background:var(--border);flex-shrink:0;';
-    // 학생 답 버튼
-    const studWrap = document.createElement('div');
-    studWrap.className = 'answer-btns';
-    studWrap.title = '학생답(진하게)';
-    CIRCLE.forEach(c => {
-      const b = document.createElement('button');
-      b.className = 'ans-btn' + (studentAnswers[n] === c ? ' selected-student' : '');
-      b.textContent = c;
-      b.onclick = () => {
-        if (studentAnswers[n] === c) delete studentAnswers[n]; else studentAnswers[n] = c;
-        initAnswerUI();
-      };
-      studWrap.appendChild(b);
-    });
-    row.appendChild(corrWrap);
-    row.appendChild(divider);
-    row.appendChild(studWrap);
-    gridEl.appendChild(row);
+  gridEl.innerHTML='';
+  const C=['①','②','③','④','⑤'];
+  for(let n=1;n<=problemCount;n++){
+    const row=document.createElement('div'); row.className='answer-row';
+    row.innerHTML=`<span class="answer-num">${n}번</span>`;
+    const corr=document.createElement('div'); corr.className='answer-btns';
+    C.forEach(v=>{ const b=document.createElement('button'); b.className='ans-btn'+(correctAnswers[n]===v?' sel-c':''); b.textContent=v; b.onclick=()=>{ if(correctAnswers[n]===v) delete correctAnswers[n]; else correctAnswers[n]=v; initAnswerUI();}; corr.appendChild(b);});
+    const divider=document.createElement('div'); divider.style.cssText='width:1px;height:20px;background:var(--border);flex-shrink:0;';
+    const stud=document.createElement('div'); stud.className='answer-btns';
+    C.forEach(v=>{ const b=document.createElement('button'); b.className='ans-btn'+(studentAnswers[n]===v?' sel-s':''); b.textContent=v; b.onclick=()=>{ if(studentAnswers[n]===v) delete studentAnswers[n]; else studentAnswers[n]=v; initAnswerUI();}; stud.appendChild(b);});
+    row.appendChild(corr); row.appendChild(divider); row.appendChild(stud); gridEl.appendChild(row);
   }
 }
 
-// ──────────────────────────────────────────────
-// 파일 업로드
-// ──────────────────────────────────────────────
-function handleUpload(key, input) {
-  Array.from(input.files).forEach(file => {
-    const isPdf = file.type === 'application/pdf';
-    const reader = new FileReader();
-    reader.onload = e => {
-      store[key].push({
-        base64: e.target.result.split(',')[1],
-        mediaType: isPdf ? 'application/pdf' : (file.type || 'image/jpeg'),
-        name: file.name,
-        isPdf,
-      });
+function toggleMock(){
+  isMock=!isMock;
+  document.getElementById('mockToggle').textContent=isMock?'🧪 목업 ON':'🧪 목업 OFF';
+  document.getElementById('mockBanner').style.display=isMock?'block':'none';
+}
+
+function handleUpload(key,input){
+  Array.from(input.files).forEach(file=>{
+    const isPdf=file.type==='application/pdf';
+    const reader=new FileReader();
+    reader.onload=e=>{
+      store[key].push({base64:e.target.result.split(',')[1],mediaType:isPdf?'application/pdf':(file.type||'image/jpeg'),name:file.name,isPdf});
       renderPreviews(key);
     };
     reader.readAsDataURL(file);
   });
-  input.value = '';
+  input.value='';
 }
-
-function removeFile(key, idx) {
-  store[key].splice(idx, 1);
-  renderPreviews(key);
-}
-
-function renderPreviews(key) {
-  const fileId = `file-${key}`;
-  const area = document.getElementById(`preview-${key}`);
-  const badge = document.getElementById(`badge-${key}`);
-  area.innerHTML = '';
-  if (store[key].length) {
-    badge.style.display = 'inline';
-    badge.textContent = `📁 ${store[key].length}`;
-  } else {
-    badge.style.display = 'none';
-  }
-  store[key].forEach((f, i) => {
-    const wrap = document.createElement('div');
-    wrap.className = 'img-wrap';
-    if (f.isPdf) {
-      wrap.innerHTML = `<div class="pdf-thumb">📄<span class="pdf-thumb-name">${f.name.replace(/\.pdf$/i,'')}</span></div>
-        <button class="img-remove" onclick="removeFile('${key}',${i})">×</button>
-        <div class="img-name">${f.name}</div>`;
-    } else {
-      wrap.innerHTML = `<img class="img-thumb" src="data:${f.mediaType};base64,${f.base64}" onclick="openLightbox(this.src)" title="${f.name}"/>
-        <button class="img-remove" onclick="removeFile('${key}',${i})">×</button>
-        <div class="img-name">${f.name}</div>`;
-    }
+function removeFile(key,idx){store[key].splice(idx,1);renderPreviews(key);}
+function renderPreviews(key){
+  const area=document.getElementById(`preview-${key}`), badge=document.getElementById(`badge-${key}`); area.innerHTML='';
+  if(store[key].length){badge.style.display='inline'; badge.textContent=`📁 ${store[key].length}`;} else badge.style.display='none';
+  store[key].forEach((f,i)=>{
+    const wrap=document.createElement('div'); wrap.className='thumb-wrap';
+    if(f.isPdf) wrap.innerHTML=`<div class="pdf-thumb">📄</div><button class="file-remove" onclick="removeFile('${key}',${i})">×</button><div class="file-name">${escapeHtml(f.name)}</div>`;
+    else wrap.innerHTML=`<img class="thumb" src="data:${f.mediaType};base64,${f.base64}" onclick="openLightbox(this.src)"><button class="file-remove" onclick="removeFile('${key}',${i})">×</button><div class="file-name">${escapeHtml(f.name)}</div>`;
     area.appendChild(wrap);
   });
-  const add = document.createElement('label');
-  add.className = 'add-btn';
-  add.htmlFor = fileId;
-  add.textContent = '+';
-  area.appendChild(add);
+  const add=document.createElement('label'); add.className='thumb'; add.htmlFor=`file-${key}`; add.style.cssText='display:flex;align-items:center;justify-content:center;border:2px dashed var(--border);background:transparent;color:var(--text3);font-size:22px;cursor:pointer'; add.textContent='+'; area.appendChild(add);
 }
-
-function openLightbox(src) { document.getElementById('lightboxImg').src = src; document.getElementById('lightbox').classList.add('open'); }
-function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
-function goBack() {
+function openLightbox(src){document.getElementById('lightboxImg').src=src;document.getElementById('lightbox').classList.add('open');}
+function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
+function goBack(){
+  // 정답/학생선택 초기화 (이전 값 잔류로 정오답 오판 방지)
+  Object.keys(correctAnswers).forEach(k=>delete correctAnswers[k]);
+  Object.keys(studentAnswers).forEach(k=>delete studentAnswers[k]);
+  initAnswerUI();
   document.getElementById('resultView').classList.remove('visible');
-  document.getElementById('inputView').style.display = 'block';
-  document.getElementById('analyzeWrap').style.display = 'flex';
-}
-function toggleMock() {
-  isMock = !isMock;
-  const btn = document.getElementById('mockToggle');
-  btn.textContent = isMock ? '🧪 목업 ON' : '🧪 목업 OFF';
-  btn.style.background = isMock ? '#fef3c7' : 'var(--surface2)';
-  btn.style.borderColor = isMock ? '#fde68a' : 'var(--border)';
-  document.getElementById('mockBanner').style.display = isMock ? 'block' : 'none';
+  document.getElementById('inputView').style.display='block';
+  document.getElementById('bottomBar').style.display='flex';
 }
 
-// ──────────────────────────────────────────────
-// 핵심 API 호출 — 재시도 포함
-// ──────────────────────────────────────────────
-async function callProxy({parts, system='', stream=false, model=MODEL.ocr, attempt=0, setMsgFn=null}) {
-  const apiKey = document.getElementById('apiKey').value.trim();
-  const res = await fetch('/api/proxy', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: JSON.stringify({apiKey, system, stream, model, messages:[{role:'user', content:parts}]}),
-  });
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function escapeHtml(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fixLatex(s=''){
+  // OCR이 LaTeX로 출력한 경우 일반 텍스트로 변환
+  let r=String(s);
+  r=r.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g,'($1)/($2)');
+  r=r.replace(/\\times/g,'×');r=r.replace(/\\cdot/g,'·');
+  r=r.replace(/\\tau/g,'τ');r=r.replace(/\\Sigma/g,'Σ');r=r.replace(/\\sigma/g,'σ');
+  r=r.replace(/\\mu/g,'μ');r=r.replace(/\\theta/g,'θ');r=r.replace(/\\omega/g,'ω');
+  r=r.replace(/\\alpha/g,'α');r=r.replace(/\\beta/g,'β');r=r.replace(/\\Delta/g,'Δ');
+  r=r.replace(/\\pi/g,'π');r=r.replace(/\\sqrt\{([^}]+)\}/g,'√($1)');r=r.replace(/\\pm/g,'±');
+  r=r.replace(/\\neq/g,'≠');r=r.replace(/\\leq/g,'≤');r=r.replace(/\\geq/g,'≥');
+  r=r.replace(/\$([^$\n]+)\$/g,'$1');r=r.replace(/\\[a-zA-Z]+/g,'');
+  r=r.replace(/\{/g,'(').replace(/\}/g,')');
+  return r;
+}
+function safeText(s){return (s||'').toString().trim();}
+function normalizeText(s=''){return s.replace(/\s+/g,' ').replace(/[,:]/g,' ').replace(/[()\[\]{}]/g,' ').replace(/→/g,'=').trim();}
+function normalizeFormula(s=''){return normalizeText(s).replace(/\s/g,'').replace(/\*|·/g,'×').replace(/[−–—]/g,'-').replace(/=/g,'=').replace(/([^0-9A-Za-z가-힣τΣμθ①②③④⑤])/g, m=>m).trim();}
+function normalizeEquation(eq=''){return normalizeFormula(eq).split('=').filter(Boolean).sort().join('=');}
+function extractMathTokens(s=''){const t=normalizeFormula(s); const matches=t.match(/[A-Za-z]+|\d+(?:\.\d+)?|Σ|τ|μ|θ|①|②|③|④|⑤|[=+\-×/]/g); return matches||[];}
+function jaccard(a,b){const A=new Set(a), B=new Set(b); if(!A.size&&!B.size) return 1; let inter=0; A.forEach(x=>{if(B.has(x)) inter++;}); return inter/(A.size+B.size-inter||1);}
+function containsAny(hay, needles){const h=normalizeFormula(hay); return needles.some(n=>n && h.includes(normalizeFormula(n)));}
 
-  // ── 비스트리밍: body를 한 번만 읽음 ──
-  if (!stream) {
-    const raw = await res.text();
-    if (!res.ok) {
-      let errMsg = 'API 오류', retryAfter = 65;
-      try { const j = JSON.parse(raw); errMsg = j.error?.message||errMsg; retryAfter = j.retryAfter||65; } catch { errMsg = raw.slice(0,200); }
-      errMsg = errMsg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
-      if (res.status === 429 && attempt < 2) {
-        if (setMsgFn) setMsgFn(`⏳ quota 초과 — ${retryAfter}초 후 자동 재시도... (${attempt+1}/2)`);
-        await sleep(retryAfter * 1000);
-        return callProxy({parts, system, stream, model: attempt>=1 ? MODEL.fallback : model, attempt: attempt+1, setMsgFn});
-      }
-      throw new Error(errMsg);
-    }
-    try { const d = JSON.parse(raw); return d.content?.map(c=>c.text||'').join('').trim()||''; } catch { return ''; }
+function calcSimilarity(solutionText, studentText, solutionDrawing='', studentDrawing=''){
+  const solTokens=extractMathTokens(solutionText+' '+solutionDrawing);
+  const stuTokens=extractMathTokens(studentText+' '+studentDrawing);
+  const tokenScore=jaccard(solTokens,stuTokens);
+
+  const solutionForms = solutionText.split(';').map(s=>normalizeEquation(s)).filter(Boolean).slice(0,5);
+  const studentForms = studentText.split(';').map(s=>normalizeEquation(s)).filter(Boolean);
+  const exactEqMatch = solutionForms.length && studentForms.length && solutionForms.some(sf => studentForms.includes(sf));
+  const partialEqMatch = !exactEqMatch && solutionForms.some(sf => studentForms.some(st => sf && st && (sf.includes(st) || st.includes(sf))));
+
+  const keyFormulaBonus = exactEqMatch ? 0.28 : partialEqMatch ? 0.12 : (containsAny(studentText, solutionText.split(';').map(s=>s.trim()).slice(0,3)) ? 0.08 : 0);
+  const drawingBonus = (studentDrawing&&studentDrawing!=='없음'&&solutionDrawing&&solutionDrawing!=='없음') ? 0.1 : 0;
+  return Math.max(0,Math.min(1,tokenScore + keyFormulaBonus + drawingBonus));
+}
+
+function scoreBandBySimilarity(sim){
+  if(sim>=0.9) return {penalty:0, label:'높음'};
+  if(sim>=0.75) return {penalty:1, label:'양호'};
+  if(sim>=0.55) return {penalty:3, label:'보통'};
+  if(sim>=0.4) return {penalty:5, label:'낮음'};
+  return {penalty:8, label:'매우 낮음'};
+}
+
+function applyWeightedScores(problem){
+  const p=JSON.parse(JSON.stringify(problem));
+  const solutionText=(p.solution_steps||[]).join(' ; ');
+  const studentText=[p.student_summary?.equation,p.student_summary?.calculation,p.student_summary?.final_answer].filter(Boolean).join(' ; ');
+  const sim=calcSimilarity(solutionText, studentText, '', p.student_summary?.drawing||'');
+  const band=scoreBandBySimilarity(sim);
+  p.similarity=sim;
+  p.similarity_band=band.label;
+
+  const userAnswer=correctAnswers[p.number];
+  const userStudent=studentAnswers[p.number];
+  if(userAnswer) p.answer=userAnswer;
+  if(userAnswer&&userStudent){
+    p.judgement = userAnswer===userStudent ? (sim>=0.75?'일치':'풀이가 다름') : '오류 있음';
+    p.student_summary = p.student_summary || {};
+    p.student_summary.final_answer = userStudent;
+  } else if (!p.judgement) {
+    p.judgement='입력 필요';
   }
 
-  // ── 스트리밍: ok 아니면 에러 반환 ──
-  if (!res.ok) {
-    const raw = await res.text();
-    let errMsg = 'API 오류', retryAfter = 65;
-    try { const j = JSON.parse(raw); errMsg = j.error?.message||errMsg; retryAfter = j.retryAfter||65; } catch { errMsg = raw.slice(0,200); }
-    errMsg = errMsg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
-    if (res.status === 429 && attempt < 2) {
-      if (setMsgFn) setMsgFn(`⏳ quota 초과 — ${retryAfter}초 후 자동 재시도... (${attempt+1}/2)`);
-      await sleep(retryAfter * 1000);
-      return callProxy({parts, system, stream, model: attempt>=1 ? MODEL.fallback : model, attempt: attempt+1, setMsgFn});
-    }
-    throw new Error(errMsg);
+  const baseConcept = Number(p.scores?.concept ?? 7);
+  const baseProcess = Number(p.scores?.process ?? 7);
+  const baseInterpret = Number(p.scores?.interpretation ?? 7);
+
+  let concept=baseConcept, process=baseProcess, interpret=baseInterpret;
+  if(p.judgement==='오류 있음'){
+    concept=Math.max(0,baseConcept-band.penalty);
+    process=Math.max(0,baseProcess-(band.penalty+1));
+    interpret=Math.max(0,baseInterpret-(p.student_summary?.drawing&&p.student_summary?.drawing!=='없음'?Math.max(1,band.penalty-1):band.penalty));
+  } else if(p.judgement==='풀이가 다름'){
+    concept=Math.max(0,baseConcept-Math.max(0,band.penalty-2));
+    process=Math.max(0,baseProcess-band.penalty);
+    interpret=Math.max(0,baseInterpret-Math.max(0,band.penalty-1));
+  } else if(p.judgement==='일치'){
+    concept=Math.max(8,baseConcept);
+    process=Math.max(8,baseProcess);
+    interpret=Math.max(8,baseInterpret);
   }
-  return res; // 스트리밍 Response 반환
-}
 
-async function streamResponse(res, onChunk) {
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = '';
-  while (true) {
-    const {done, value} = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, {stream:true});
-    const lines = buf.split('\n'); buf = lines.pop();
-    for (const line of lines) {
-      if (!line.startsWith('data: ')) continue;
-      const d = line.slice(6).trim();
-      if (d === '[DONE]') continue;
-      try { const j = JSON.parse(d); if (j.type==='content_block_delta'&&j.delta?.text) onChunk(j.delta.text); } catch {}
-    }
+  const solutionLen=normalizeText(solutionText).length;
+  const studentLen=normalizeText(studentText).length + normalizeText(p.student_summary?.drawing||'').length;
+  const hasCoreEquation = extractMathTokens(p.student_summary?.equation||'').length >= 3;
+  const excluded = sim < 0.45 || solutionLen < 20 || studentLen < 10 || (!hasCoreEquation && sim < 0.55);
+  if(excluded){
+    p.judgement='분석 제외';
+    concept=0; process=0; interpret=0;
+    p.feedback = p.feedback || {};
+    p.feedback.evaluation = '해설과 학생 풀이의 비교 근거가 너무 적어 신뢰 가능한 판정을 내리기 어려워 이 문제는 분석에서 제외했습니다.';
+    p.feedback.improvement = '해설 식이 더 잘 보이게 다시 업로드하거나, 학생 풀이에서 식과 그림이 함께 보이도록 촬영해 주세요.';
   }
-}
 
-const sleep = ms => new Promise(r => setTimeout(r, ms));
+  p.scores = p.scores || {};
+  p.scores.concept=concept;
+  p.scores.process=process;
+  p.scores.interpretation=interpret;
+  p.scores.total=concept+process+interpret;
 
-// ──────────────────────────────────────────────
-// parts 빌더 — 파일 → Gemini 형식
-// ──────────────────────────────────────────────
-function buildParts(prompt, files) {
-  const p = [{type:'text', text:prompt}];
-  files.forEach((f, i) => {
-    p.push({type:'text', text:`파일${i+1}: ${f.name}`});
-    if (f.isPdf) p.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-    else p.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
-  });
+  p.scores.concept_reason = buildReason('개념', p, sim, p.scores.concept_reason);
+  p.scores.process_reason = buildReason('전개', p, sim, p.scores.process_reason);
+  p.scores.interpretation_reason = buildReason('해석', p, sim, p.scores.interpretation_reason);
   return p;
 }
 
-// ──────────────────────────────────────────────
-// analyze 메인 함수
-// ──────────────────────────────────────────────
-
-async function analyze() {
-  if (isAnalyzing) return;
-  const apiKey = document.getElementById('apiKey').value.trim();
-  if (!isMock && !apiKey) { alert('API Key를 입력해주세요.'); return; }
-
-  const qT = document.getElementById('text-q').value.trim();
-  const aT = document.getElementById('text-a').value.trim();
-  const sT = document.getElementById('text-s').value.trim();
-  const range = document.getElementById('bulk-range').value.trim();
-
-  if (!qT && !aT && !sT && !store.q.length && !store.a.length && !store.s.length) {
-    alert('사진 또는 텍스트를 하나 이상 입력해주세요.');
-    return;
+function buildReason(kind,p,sim,base=''){
+  const sol=(p.solution_steps||[]).join(' / ');
+  const stuEq=p.student_summary?.equation||'';
+  const stuCalc=p.student_summary?.calculation||'';
+  const drawing=p.student_summary?.drawing||'';
+  if(p.judgement==='분석 제외') return '비교 근거가 부족해 점수를 산정하지 않았습니다.';
+  if(kind==='개념'){
+    if(p.judgement==='일치') return '해설 핵심 식과 학생 식의 일치도가 높고 핵심 개념 적용이 안정적입니다.';
+    if(p.judgement==='풀이가 다름') return `해설 핵심 식과 학생 식이 부분적으로만 겹칩니다. 유사도 ${Math.round(sim*100)}% 수준입니다.`;
+    return `해설 식 "${trimForReason(sol)}"과 학생 식 "${trimForReason(stuEq||stuCalc)}"이 충분히 맞지 않아 개념 적용에 오류가 있습니다.`;
   }
-  if (!aT && !store.a.length) {
-    alert('해설 사진/PDF 또는 해설 텍스트를 입력해주세요.');
-    return;
+  if(kind==='전개'){
+    if(p.judgement==='일치') return '식 설정에서 계산 결론까지 흐름이 해설과 거의 같습니다.';
+    if(p.judgement==='풀이가 다름') return `식 일부는 맞지만 계산 전개가 해설과 달라 점수 가중 감점을 적용했습니다. 유사도 ${Math.round(sim*100)}%.`;
+    return `해설 전개와 학생 계산 "${trimForReason(stuCalc)}"이 다르므로 전개 점수를 낮췄습니다.`;
   }
+  if(p.judgement==='일치') return '그림, 기준점, 거리 정보를 비교적 안정적으로 읽었습니다.';
+  if(drawing && drawing!=='없음') return `학생 그림/도형 "${trimForReason(drawing)}"은 읽혔지만 해설의 핵심 요소와 완전히 맞지는 않았습니다.`;
+  return '그림 또는 조건 해석 근거가 부족하거나 해설의 핵심 요소와 다릅니다.';
+}
+function trimForReason(s=''){s=safeText(s); return s.length>42?s.slice(0,42)+'…':s;}
 
-  isAnalyzing = true;
-  const btn = document.getElementById('analyzeBtn');
-  btn.disabled = true; btn.textContent = '⏳ 분석 중...';
-  document.getElementById('inputView').style.display = 'none';
-  document.getElementById('analyzeWrap').style.display = 'none';
-  document.getElementById('resultView').classList.add('visible');
-  const rc = document.getElementById('resultContent');
-  rc.innerHTML = `<div class="loading-wrap"><div class="loading-spinner"></div><div class="loading-text" id="loadingMsg">${isMock?'🧪 샘플 결과 생성 중...':'분석을 시작합니다...'}<br><small style="color:var(--text3)">${isMock?'실제 API 호출 없음':'이미지를 읽고 피드백을 작성합니다'}</small></div></div>`;
+function parseProblemsFromOCR(text){
+  const blocks=[];
+  const parts=text.split(/\[문제\s*(\d+)\]/g);
+  for(let i=1;i<parts.length;i+=2){
+    const number=parseInt(parts[i],10);
+    const body=(parts[i+1]||'').trim();
+    if(Number.isFinite(number)) blocks.push({number, body});
+  }
+  return blocks;
+}
 
-  const setMsg = msg => { const el = document.getElementById('loadingMsg'); if (el) el.innerHTML = msg; };
+async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn=null}){
+  const apiKey=document.getElementById('apiKey').value.trim();
+  const res=await fetch('/api/proxy',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({apiKey, system, stream:false, model, messages:[{role:'user',content:parts}]})
+  });
+  const raw=await res.text();
+  if(!res.ok){
+    let msg='API 오류', retryAfter=65;
+    try{const j=JSON.parse(raw); msg=j.error?.message||msg; retryAfter=j.retryAfter||65;}catch{msg=raw.slice(0,300);}
+    msg=msg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
+    // 429(quota) 또는 503(혼잡) 시 자동 재시도
+    if((res.status===429||res.status===503) && attempt<2){
+      const waitMsg=`⏳ 서버 혼잡 — ${retryAfter}초 후 자동 재시도... (${attempt+1}/2)`;
+      if(setMsgFn) setMsgFn(waitMsg);
+      else{const el=document.getElementById('loadingText'); if(el) el.innerHTML=waitMsg;}
+      await sleep(retryAfter*1000);
+      return callProxy({parts, system, model, attempt:attempt+1, setMsgFn});
+    }
+    throw new Error(msg);
+  }
+  try{const j=JSON.parse(raw); return j.content?.map(c=>c.text||'').join('').trim()||'';}catch{return raw.trim();}
+}
 
-  const compressImage = (file) => new Promise(resolve => {
-    if (file.isPdf) { resolve(file); return; }
-    const img = new Image();
-    img.onload = () => {
-      const MAX = 1400;
-      let w = img.width, h = img.height;
-      if (w > MAX || h > MAX) {
-        if (w > h) { h = Math.round(h * MAX / w); w = MAX; }
-        else { w = Math.round(w * MAX / h); h = MAX; }
-      }
-      const canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      const ctx = canvas.getContext('2d');
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve({...file, base64: canvas.toDataURL('image/jpeg', 0.88).split(',')[1], mediaType: 'image/jpeg'});
+async function compressImage(file){
+  if(file.isPdf) return file;
+  return new Promise(resolve=>{
+    const img=new Image();
+    img.onload=()=>{
+      const MAX=1600; let w=img.width,h=img.height;
+      if(w>MAX||h>MAX){ if(w>h){h=Math.round(h*MAX/w);w=MAX;} else {w=Math.round(w*MAX/h);h=MAX;} }
+      const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
+      const ctx=canvas.getContext('2d');
+      ctx.filter='grayscale(100%) contrast(120%) brightness(105%)';
+      ctx.drawImage(img,0,0,w,h);
+      resolve({...file,base64:canvas.toDataURL('image/jpeg',0.9).split(',')[1],mediaType:'image/jpeg'});
     };
-    img.src = `data:${file.mediaType};base64,${file.base64}`;
+    img.src=`data:${file.mediaType};base64,${file.base64}`;
+  });
+}
+
+async function filesToParts(files,label='파일'){
+  const p=[];
+  for(let i=0;i<files.length;i++){
+    const f=await compressImage(files[i]);
+    p.push({type:'text', text:`${label}${i+1}: ${f.name}`});
+    if(f.isPdf) p.push({type:'document', source:{type:'base64',media_type:'application/pdf',data:f.base64}});
+    else p.push({type:'image', source:{type:'base64',media_type:f.mediaType,data:f.base64}});
+  }
+  return p;
+}
+
+function buildAnalysisParts({solutionOCR, studentOCR, questionText, rangeText}){
+  const ansEntries=Object.entries(correctAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
+  const stuEntries=Object.entries(studentAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
+  let answerText='';
+  if(ansEntries.length) answerText += `[정답]\n${ansEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
+  if(stuEntries.length) answerText += `[학생 선택]\n${stuEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
+  const parts=[];
+  if(rangeText) parts.push({type:'text', text:`[분석 범위]\n${rangeText}`});
+  if(questionText) parts.push({type:'text', text:`[문제]\n${questionText}`});
+  parts.push({type:'text', text:`[해설 원문]\n${solutionOCR || '없음'}`});
+  parts.push({type:'text', text:`[학생 풀이 OCR]\n${studentOCR || '없음'}`});
+  if(answerText) parts.push({type:'text', text:answerText});
+  parts.push({type:'text', text:`위 자료만 사용해 JSON만 출력하세요.`});
+  return parts;
+}
+
+function robustJsonParse(text){
+  try{return JSON.parse(text);}catch{}
+  const match=text.match(/\{[\s\S]*\}$/);
+  if(match){ try{return JSON.parse(match[0]);}catch{} }
+  throw new Error('분석 결과 JSON 파싱에 실패했습니다.');
+}
+
+function renderResults(data){
+  const rc=document.getElementById('resultContent');
+  const weighted=(data.problems||[]).map(applyWeightedScores).sort((a,b)=>a.number-b.number);
+  data.problems=weighted;
+  lastAnalysisJson=data;
+
+  const excluded=weighted.filter(p=>p.judgement==='분석 제외');
+  const active=weighted.filter(p=>p.judgement!=='분석 제외');
+  const avg=(arr,key)=>arr.length?(arr.reduce((s,p)=>s+(p.scores?.[key]||0),0)/arr.length).toFixed(1):'0.0';
+  let html='';
+  if(excluded.length){
+    html += `<div class="warn-card"><div class="warn-body"><b>제외된 문제</b><br>${excluded.map(p=>`${p.number}번`).join(', ')} 문제는 해설/학생 풀이 근거가 너무 약해 자동 제외했습니다.</div></div>`;
+  }
+  weighted.forEach(p=>{
+    html += `<div class="result-card"><div class="result-card-header">문제 ${p.number} 피드백</div><div class="result-card-body">`;
+    html += `<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">${escapeHtml(p.answer||'-')}</div></div>`;
+    html += `<div class="sec"><div class="sec-title">2. 판정</div><div class="box">${escapeHtml(p.judgement||'입력 필요')} <span class="mono small muted">| 유사도 ${Math.round((p.similarity||0)*100)}% · ${escapeHtml(p.similarity_band||'-')}</span></div></div>`;
+    html += `<div class="sec"><div class="sec-title">3. 해설 풀이 정리</div>`;
+    (p.solution_steps||[]).forEach((step,idx)=>{ html += `<div class="step"><div class="step-num">${idx+1}</div><div>${escapeHtml(fixLatex(step))}</div></div>`; });
+    html += `</div>`;
+    html += `<div class="sec"><div class="sec-title">4. 학생 풀이 정리</div><div class="box">`
+      + `<div><b>학생이 세운 식:</b> ${escapeHtml(p.student_summary?.equation||'-')}</div>`
+      + `<div><b>학생의 계산 과정:</b> ${escapeHtml(p.student_summary?.calculation||'-')}</div>`
+      + `<div><b>학생의 그림/도형:</b> ${escapeHtml(p.student_summary?.drawing||'-')}</div>`
+      + `<div><b>학생의 최종 답:</b> ${escapeHtml(p.student_summary?.final_answer||'-')}</div></div></div>`;
+    html += `<div class="sec"><div class="sec-title">5. 풀이 피드백</div><div class="box">`
+      + `<div><b>해설 기준 평가:</b> ${escapeHtml(fixLatex(p.feedback?.evaluation||'-'))}</div>`
+      + `<div style="margin-top:6px"><b>개선점:</b> ${escapeHtml(p.feedback?.improvement||'-')}</div></div></div>`;
+    html += `<div class="sec"><div class="sec-title">6. 역량 점수</div><div class="score-grid">`
+      + scoreCell('개념 이해도', p.scores?.concept||0, p.scores?.concept_reason||'')
+      + scoreCell('풀이 전개력', p.scores?.process||0, p.scores?.process_reason||'')
+      + scoreCell('문제 해석력', p.scores?.interpretation||0, p.scores?.interpretation_reason||'')
+      + scoreCell('합계', p.scores?.total||0, `유사도 ${Math.round((p.similarity||0)*100)}%를 반영해 가중 조정했습니다.`)
+      + `</div></div>`;
+    html += `</div></div>`;
   });
 
-  const filesToParts = async (files) => {
-    const p = [];
-    for (let i = 0; i < files.length; i++) {
-      const f = await compressImage(files[i]);
-      p.push({type:'text', text:`파일${i+1}`});
-      if (f.isPdf) p.push({type:'document', source:{type:'base64', media_type:'application/pdf', data:f.base64}});
-      else p.push({type:'image', source:{type:'base64', media_type:f.mediaType, data:f.base64}});
-    }
-    return p;
-  };
+  html += `<div class="result-card"><div class="result-card-header">총평</div><div class="result-card-body">`
+    + `<div class="table-wrap"><table class="table"><thead><tr><th>문제</th><th>판정</th><th>개념</th><th>전개</th><th>해석</th><th>합계</th></tr></thead><tbody>`
+    + weighted.map(p=>`<tr><td>${p.number}번</td><td>${escapeHtml(p.judgement)}</td><td>${p.scores?.concept||0}/10</td><td>${p.scores?.process||0}/10</td><td>${p.scores?.interpretation||0}/10</td><td>${p.scores?.total||0}/30</td></tr>`).join('')
+    + `<tr><td><b>평균</b></td><td>-</td><td><b>${avg(active,'concept')}</b></td><td><b>${avg(active,'process')}</b></td><td><b>${avg(active,'interpretation')}</b></td><td><b>${(active.length?(active.reduce((s,p)=>s+(p.scores?.total||0),0)/active.length):0).toFixed(1)}</b></td></tr>`
+    + `</tbody></table></div>`
+    + `<div class="sec"><div class="sec-title">강점</div><div class="box">${escapeHtml(data.total?.strengths||'-')}</div></div>`
+    + `<div class="sec"><div class="sec-title">보완할 점</div><div class="box">${escapeHtml(data.total?.weaknesses||'-')}</div></div>`
+    + `<div class="sec"><div class="sec-title">학습 방향</div><div class="box">${escapeHtml(data.total?.study_direction||'-')}</div></div>`
+    + `</div></div>`;
+  rc.innerHTML=html;
+  lastRenderedHtml=html;
+}
 
-  const parseSection = (src, tag) => {
-    if (!src) return '';
-    const m = src.match(new RegExp(`\\[${tag}\\]([\\s\\S]*?)(?=\\[(?:해설|학생풀이)\\]|$)`));
-    return m ? m[1].trim() : src.trim();
-  };
+function scoreCell(label,val,reason){
+  return `<div class="score-cell"><div class="score-label">${escapeHtml(label)}</div><div class="score-val">${val}</div><div class="small muted">/ ${label==='합계'?'30':'10'}점</div><div class="score-reason">${escapeHtml(reason)}</div></div>`;
+}
 
-  const overrideManualAnswers = (rawText) => {
-    let out = rawText;
-    const nums = Array.from(new Set([
-      ...Object.keys(correctAnswers).map(Number),
-      ...Object.keys(studentAnswers).map(Number)
-    ])).sort((a,b)=>a-b);
+async function analyze(){
+  if(isAnalyzing) return;
+  const apiKey=document.getElementById('apiKey').value.trim();
+  if(!isMock && !apiKey){ alert('API Key를 입력해주세요.'); return; }
+  const qT=document.getElementById('text-q').value.trim();
+  const aT=document.getElementById('text-a').value.trim();
+  const sT=document.getElementById('text-s').value.trim();
+  const rangeText=document.getElementById('rangeText').value.trim();
+  if(!qT && !aT && !sT && !store.q.length && !store.a.length && !store.s.length){ alert('사진 또는 텍스트를 하나 이상 입력해주세요.'); return; }
 
-    nums.forEach(n => {
-      const corr = correctAnswers[n];
-      const stud = studentAnswers[n];
-      if (!corr && !stud) return;
-      const blockRe = new RegExp(`(=====\\s*\\n문제\\s*${n}[^]*?▶ 1\\. 정답\\s*\\n)([^\\n]*)([^]*?▶ 2\\. 정오답 판단\\s*\\n)([^\\n]*)([^]*?)(?=\\n=====|$)`);
-      out = out.replace(blockRe, (_, p1, _oldAns, p3, _oldOx, tail, end='') => {
-        const newAns = corr || _oldAns || '';
-        const newOx = (corr && stud) ? (corr === stud ? 'O' : 'X') : '입력 필요';
-        return `${p1}${newAns}\n${p3}${newOx}${tail}`;
-      });
-    });
-    return out;
-  };
+  isAnalyzing=true;
+  document.getElementById('analyzeBtn').disabled=true;
+  document.getElementById('inputView').style.display='none';
+  document.getElementById('bottomBar').style.display='none';
+  document.getElementById('resultView').classList.add('visible');
+  const rc=document.getElementById('resultContent');
+  rc.innerHTML='<div class="loading"><div class="spinner"></div><div id="loadingText">분석 준비 중...</div></div>';
+  const setMsg=t=>{const el=document.getElementById('loadingText'); if(el) el.innerHTML=t;};
 
-  try {
-    if (isMock) { await sleep(900); renderResult(MOCK_RESPONSE, rc); return; }
+  try{
+    if(isMock){ await sleep(500); renderResults(JSON.parse(JSON.stringify(MOCK_JSON))); return; }
 
-    let solutionOcrText = aT;
-    let studentOcrText = sT;
+    let solutionOCR=aT, studentOCR=sT;
 
-    if (!solutionOcrText && store.a.length > 0) {
-      setMsg('🔍 해설 이미지 읽는 중... (1/3)<br><small style="color:var(--text3)">해설만 먼저 정확하게 추출합니다</small>');
-      const solParts = [{type:'text', text:`물리1 해설 OCR. 각 문제를 아래 형식으로만 출력하세요.
-[해설]
-[문제1]
-정답: ①
-풀이:
-1. (해설 내용 그대로)
-2. (수식 그대로)
-3. (결론)
-규칙: 수식·숫자·기호를 바꾸지 말 것. 해설에 없는 내용 추가 금지. 문제마다 한 번만 출력.`}];
-      solParts.push(...await filesToParts(store.a));
-      const solRaw = await callProxy({parts: solParts, system: SYSTEM_OCR_SOLUTION, stream:false, model: MODEL.ocr, setMsgFn:setMsg});
-      solutionOcrText = parseSection(solRaw, '해설');
+    if(!solutionOCR && store.a.length){
+      setMsg('해설 OCR 중...<br><span class="small muted">해설 식, 그림, 거리, 기준점을 읽습니다</span>');
+      const parts=[{type:'text',text:'해설 이미지를 OCR 합니다.'}, ...(await filesToParts(store.a,'해설파일'))];
+      solutionOCR=await callProxy({parts, system:SYSTEM_OCR_SOLUTION, model:MODEL.ocr});
     }
 
-    if (!studentOcrText && store.s.length > 0) {
-      setMsg('🔍 학생 풀이 읽는 중... (2/3)<br><small style="color:var(--text3)">학생 풀이만 따로 추출합니다</small>');
-      const stuParts = [{type:'text', text:`학생 손글씨 OCR. 각 문제를 아래 형식으로만 출력하세요.
-[학생풀이]
-[문제1]
-- 식: ...
-- 계산: ...
-- 답: ...
-규칙: 보이는 것만 적고 추측 금지. 문제마다 한 번만 출력.`}];
-      stuParts.push(...await filesToParts(store.s));
-      const stuRaw = await callProxy({parts: stuParts, system: SYSTEM_OCR_STUDENT, stream:false, model: MODEL.ocr, setMsgFn:setMsg});
-      studentOcrText = parseSection(stuRaw, '학생풀이');
+    // quota 회복 대기 (분당 15회 제한 대비)
+    if(!solutionOCR || store.a.length) await sleep(10000); // quota 회복
+
+    if(!studentOCR && store.s.length){
+      setMsg('학생 풀이 OCR 중...<br><span class="small muted">중구난방 풀이도 식/계산/그림으로 분해합니다</span>');
+      const parts=[{type:'text',text:'학생 풀이 이미지를 OCR 합니다.'}, ...(await filesToParts(store.s,'학생파일'))];
+      studentOCR=await callProxy({parts, system:SYSTEM_OCR_STUDENT, model:MODEL.ocr});
     }
 
-    if (!solutionOcrText || !solutionOcrText.trim()) {
-      throw new Error('해설 OCR 결과가 비었습니다. 해설 이미지를 더 선명한 JPG/PDF로 다시 올리거나 해설 텍스트를 직접 입력해주세요.');
+    let solutionBlocks=parseProblemsFromOCR(solutionOCR||'');
+    if(!solutionBlocks.length){
+      solutionOCR = aT || '해설 인식 불완전';
+      solutionBlocks = parseProblemsFromOCR(solutionOCR||'');
     }
 
-    setMsg('⚡ 피드백 작성 중... (3/3)<br><small style="color:var(--text3)">OCR 텍스트만 기준으로 분석합니다</small>');
-
-    const analysisParts = [];
-    analysisParts.push({type:'text', text:`[해설 원문 — 절대 기준]\n${solutionOcrText}`});
-    if (qT) analysisParts.push({type:'text', text:`[문제]\n${qT}`});
-    else if (store.q.length) {
-      analysisParts.push({type:'text', text:'[문제 이미지 참고]'});
-      analysisParts.push(...await filesToParts(store.q));
-    }
-    if (studentOcrText) analysisParts.push({type:'text', text:`[학생 풀이 OCR]\n${studentOcrText}`});
-    else if (sT) analysisParts.push({type:'text', text:`[학생 풀이]\n${sT}`});
-
-    const corrList = Object.entries(correctAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
-    const studList = Object.entries(studentAnswers).sort((a,b)=>parseInt(a[0])-parseInt(b[0]));
-    let ansText = '';
-    if (corrList.length) ansText += `[정답]\n${corrList.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
-    if (studList.length) ansText += `[학생 선택]\n${studList.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
-
-    analysisParts.push({type:'text', text:`${range?`분석 범위: ${range}\n`:''}${ansText}
-출력 형식 (=====로 시작, 앞 설명 없이):
-${FMT_PROBLEM.replace(/문제N/g,'문제N(번호)')}
-
-마지막에 총평:
-${FMT_TOTAL}`});
-
-    let fullText = await callProxy({parts: analysisParts, system: SYSTEM_ANALYSIS, stream:false, model: MODEL.analysis, setMsgFn:setMsg});
-    fullText = overrideManualAnswers(fullText || '');
-    if (!fullText.trim()) throw new Error('분석 결과가 없습니다.');
-    rc.innerHTML = '';
-    renderResult(fullText, rc);
-
-  } catch(e) {
-    rc.innerHTML = `<div class="error-box">⚠️ 오류: ${e.message}<br><small>해설 이미지는 문제별로 잘 보이도록 자르거나, 해설 텍스트를 직접 붙여 넣으면 더 안정적입니다.</small></div>
-      <button class="back-btn" onclick="goBack()" style="margin-top:8px">← 다시 시도</button>`;
-  } finally {
-    isAnalyzing = false;
-    btn.disabled = false; btn.textContent = '⚡ 풀이 분석 시작';
-    const lw = rc.querySelector('.loading-wrap'); if (lw) lw.remove();
+    // 분석 전 quota 회복 대기
+    await sleep(10000); // quota 회복
+    setMsg('비교 분석 중...<br><span class="small muted">유사도·정확도를 계산하고 점수를 가중 반영합니다</span>');
+    const analysisParts=buildAnalysisParts({solutionOCR, studentOCR, questionText:qT, rangeText});
+    const analysisRaw=await callProxy({parts:analysisParts, system:SYSTEM_ANALYSIS, model:MODEL.analysis});
+    const analysisData=robustJsonParse(analysisRaw);
+    renderResults(analysisData);
+  }catch(err){
+    rc.innerHTML=`<div class="error">⚠️ 오류: ${escapeHtml(err.message)}<br><small>해설은 문제번호와 식이 잘 보이도록, 학생 풀이는 식과 그림이 함께 보이도록 다시 올려 주세요.</small></div>`;
+  }finally{
+    isAnalyzing=false;
+    document.getElementById('analyzeBtn').disabled=false;
   }
 }
-
-function correctPhysicsText(text) {
-  let r = text;
-  // LaTeX → 일반 텍스트 변환
-  r = r.replace(/\\frac\{([^}]+)\}\{([^}]+)\}/g, '($1)/($2)');
-  r = r.replace(/\\times/g, '×');
-  r = r.replace(/\\cdot/g, '·');
-  r = r.replace(/\\tau/g, 'τ');
-  r = r.replace(/\\Sigma/g, 'Σ'); r = r.replace(/\\sigma/g, 'σ');
-  r = r.replace(/\\mu/g, 'μ');
-  r = r.replace(/\\theta/g, 'θ');
-  r = r.replace(/\\omega/g, 'ω');
-  r = r.replace(/\\alpha/g, 'α'); r = r.replace(/\\beta/g, 'β');
-  r = r.replace(/\\Delta/g, 'Δ'); r = r.replace(/\\delta/g, 'δ');
-  r = r.replace(/\\pi/g, 'π');
-  r = r.replace(/\\sqrt\{([^}]+)\}/g, '√($1)');
-  r = r.replace(/\\pm/g, '±');
-  r = r.replace(/\\neq/g, '≠'); r = r.replace(/\\leq/g, '≤');
-  r = r.replace(/\\geq/g, '≥'); r = r.replace(/\\approx/g, '≈');
-  r = r.replace(/\\infty/g, '∞'); r = r.replace(/\\to/g, '→');
-  r = r.replace(/\\rightarrow/g, '→'); r = r.replace(/\\leftarrow/g, '←');
-  // $...$ 달러 기호 제거
-  r = r.replace(/\$([^$\n]+)\$/g, '$1');
-  // 잔여 LaTeX 명령어 제거
-  r = r.replace(/\\[a-zA-Z]+/g, '');
-  // 중괄호 정리
-  r = r.replace(/\{/g, '(').replace(/\}/g, ')');
-  // 물리 오인식 교정
-  const fixes = [
-    [/출퇴/g,'출제'],[/질감/g,'질량'],[/무계\b/g,'무게'],
-    [/막돼/g,'막대'],[/수직\s*횡력/g,'수직항력'],[/수직횡력/g,'수직항력'],
-    [/운동\s*에네지/g,'운동 에너지'],[/역학적\s*에네지/g,'역학적 에너지'],
-    [/퍼텐\s*셜/g,'퍼텐셜'],[/마철/g,'마찰'],[/충격\s*량/g,'충격량'],
-    [/운동\s*량/g,'운동량'],[/돌림\s*힘/g,'돌림힘'],[/도르\s*래/g,'도르래'],
-    [/탄성\s*력/g,'탄성력'],[/알짜\s*힘/g,'알짜힘'],
-  ];
-  fixes.forEach(([p,s]) => { r = r.replace(p, s); });
-  return r;
-}
-
-function renderResult(text,container){
-  lastRawText=text;
-  const corrected=correctPhysicsText(text);
-  container.innerHTML='';
-
-  // preamble 제거: 첫 ===== 이전 텍스트 버림
-  const firstSep=corrected.indexOf('=====');
-  const cleanText=firstSep>0?corrected.slice(firstSep):corrected;
-
-  const lines=cleanText.split('\n');
-  const esc=s=>s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-
-  let html='';
-  let inCard=false,inScoreGrid=false,inTable=false,inFeedback=false,inStudent=false;
-  let curSection='';
-
-  const closeScoreGrid=()=>{if(inScoreGrid){html+=`</div>`;inScoreGrid=false;}};
-  const closeTable=()=>{if(inTable){html+=`</tbody></table></div>`;inTable=false;}};
-  const closeFeedback=()=>{if(inFeedback){html+=`</div>`;inFeedback=false;}};
-  const closeStudent=()=>{if(inStudent){html+=`</div>`;inStudent=false;}};
-  const closeCard=()=>{
-    closeScoreGrid();closeTable();closeFeedback();closeStudent();
-    if(inCard){html+=`</div></div>`;inCard=false;}
-    curSection='';
-  };
-
-  const openCard=(title,isSummary)=>{
-    closeCard();
-    if(isSummary){
-      html+=`<div class="total-card">`;
-      html+=`<div class="total-card-header">📊 ${esc(title)}</div>`;
-    } else {
-      // 문제 번호 추출
-      const numM=title.match(/(\d+)/);
-      const num=numM?numM[1]:'';
-      const ox=''; // O/X는 ▶2 섹션에서
-      html+=`<div class="prob-card">`;
-      html+=`<div class="prob-card-header"><span style="font-size:13px;font-weight:700">문제 ${num}번 피드백</span></div>`;
-    }
-    html+=`<div style="padding:16px 20px 20px">`;
-    inCard=true;
-  };
-
-  for(let i=0;i<lines.length;i++){
-    const trimmed=lines[i].trim();
-
-    // ===== 구분선 → 새 카드
-    if(/^={4,}/.test(trimmed)){
-      const next=(lines[i+1]||'').trim();
-      if(next&&!/^={4,}/.test(next)){
-        i++;
-        openCard(next,next==='총평'||next.includes('총평'));
-        if((lines[i+1]||'').trim().match(/^={4,}/))i++;
-      }
-      continue;
-    }
-
-    if(!inCard){
-      html+=`<div class="prob-card"><div style="padding:16px 20px 20px">`;
-      inCard=true;
-    }
-
-    // ▶ 섹션 헤더
-    if(/^▶/.test(trimmed)){
-      closeScoreGrid();closeTable();closeFeedback();closeStudent();
-      const label=trimmed.replace(/^▶\s*\d+\.\s*/,'').replace(/^▶\s*/,'');
-      curSection=label;
-
-      // 섹션별 배지 색상
-      let badgeColor='var(--accent)';
-      let badgeBg='var(--accent-light)';
-      if(label.includes('정오답')){badgeColor='var(--text2)';badgeBg='var(--surface2)';}
-      else if(label.includes('피드백')){badgeColor='#0369a1';badgeBg='#e0f2fe';}
-      else if(label.includes('역량')||label.includes('점수')){badgeColor='var(--green)';badgeBg='#dcfce7';}
-      else if(label.includes('학생')){badgeColor='var(--yellow)';badgeBg='#fef9c3';}
-
-      html+=`<div class="section-label"><span class="section-label-bar" style="background:${badgeColor}"></span><span style="color:${badgeColor}">${esc(label)}</span></div>`;
-      continue;
-    }
-
-    // 풀이 단계 (N단계:)
-    if(/^\d+단계[:\s]/.test(trimmed)){
-      closeFeedback();closeStudent();
-      const nm=trimmed.match(/^(\d+)단계[:\s]+(.*)/);
-      if(nm){
-        const sc_=nm[2].trim();
-        if(sc_==='<보기>'||sc_==='보기'||/^<보기>\s*$/.test(sc_)){continue;}
-        html+=`<div class="step-row"><span class="step-num">${nm[1]}</span><span class="step-text">${esc(sc_)}</span></div>`;
-        continue;
-      }
-    }
-
-    // - 항목 처리
-    if(/^-\s+/.test(trimmed)){
-      // 역량 점수
-      const scoreM=trimmed.match(/^-\s+(개념 이해도|풀이 전개력|문제 해석력):\s*(\d+)점\s*\/\s*10점(?:\s*\|\s*이유:\s*(.*))?/);
-      const totalM=trimmed.match(/^-\s+합계:\s*(\d+)점\s*\/\s*30점/);
-
-      if(scoreM){
-        closeFeedback();closeStudent();
-        const label=scoreM[1],score=parseInt(scoreM[2]),reason=scoreM[3]||'';
-        const isPerfect=score===10;
-        const col=isPerfect?'var(--green)':score>=8?'var(--accent)':score>=6?'var(--yellow)':'var(--red)';
-        if(label==='개념 이해도'){
-          closeScoreGrid();
-          html+=`<div class="score-grid">`;
-          inScoreGrid=true;
-        }
-        html+=`<div class="score-cell">`;
-        html+=`<div class="score-cell-label">${esc(label)}</div>`;
-        html+=`<div class="score-cell-val" style="color:${col}">${score}</div>`;
-        html+=`<div class="score-cell-max">/ 10점</div>`;
-        if(reason&&reason!=='만점'){
-          html+=`<div class="score-cell-reason">${esc(reason)}</div>`;
-        }
-        html+=`</div>`;
-        continue;
-      }
-
-      if(totalM){
-        closeScoreGrid();
-        const total=parseInt(totalM[1]);
-        const totalCol=total>=25?'var(--green)':total>=18?'var(--accent)':total>=12?'var(--yellow)':'var(--red)';
-        html+=`<div class="score-total-row">`;
-        html+=`<span style="font-size:12px;color:var(--text2);font-weight:600">총점</span>`;
-        html+=`<span style="font-family:'JetBrains Mono',monospace;font-size:24px;font-weight:700;color:${totalCol}">${total}</span>`;
-        html+=`<span style="font-size:12px;color:var(--text3)">/ 30점</span>`;
-        html+=`</div>`;
-        continue;
-      }
-
-      // 피드백 섹션 항목
-      if(curSection.includes('피드백')){
-        closeFeedback();closeStudent();
-        if(!inFeedback){
-          html+=`<div class="feedback-box">`;
-          inFeedback=true;
-        }
-        const colon=trimmed.indexOf(':');
-        if(colon>0){
-          const fbLabel=trimmed.slice(2,colon+1);
-          const fbVal=trimmed.slice(colon+1).trim();
-          html+=`<div class="fb-row"><span class="fb-label">${esc(fbLabel)}</span> ${esc(fbVal)}</div>`;
-        } else {
-          html+=`<div class="fb-row">${esc(trimmed)}</div>`;
-        }
-        continue;
-      }
-
-      // 학생 풀이 정리 항목
-      if(curSection.includes('학생')){
-        closeFeedback();
-        if(!inStudent){
-          html+=`<div class="student-box">`;
-          inStudent=true;
-        }
-        const colon=trimmed.indexOf(':');
-        if(colon>0){
-          const srLabel=trimmed.slice(2,colon+1);
-          const srVal=trimmed.slice(colon+1).trim();
-          html+=`<div class="sr"><span class="sr-label">${esc(srLabel)}</span> ${esc(srVal)}</div>`;
-        } else {
-          html+=`<div class="sr">${esc(trimmed)}</div>`;
-        }
-        continue;
-      }
-
-      // 정답/정오답
-      closeScoreGrid();closeFeedback();closeStudent();
-      html+=`<div class="bullet-row">${esc(trimmed)}</div>`;
-      continue;
-    }
-
-    // 파이프 표 (총평 점수표)
-    if(/^\|/.test(trimmed)){
-      if(/^\|[-| ]+\|$/.test(trimmed))continue;
-      const cells=trimmed.split('|').map(c=>c.trim()).filter(c=>c);
-      if(!cells.length)continue;
-      closeFeedback();closeStudent();closeScoreGrid();
-
-      const isHeader=cells.some(c=>['문제','정오답','개념','풀이','해석력','합계','이해도','전개력'].includes(c));
-      if(isHeader&&!inTable){
-        html+=`<div style="overflow-x:auto;margin:8px 0"><table style="width:100%;border-collapse:collapse;font-size:12px"><thead><tr>`;
-        cells.forEach(c=>{html+=`<th style="background:var(--surface2);color:var(--text2);padding:9px 12px;text-align:center;border-bottom:2px solid var(--border);font-weight:700;white-space:nowrap">${esc(c)}</th>`;});
-        html+=`</tr></thead><tbody>`;
-        inTable=true;
-        continue;
-      }
-      if(inTable){
-        const isAvg=cells[0]==='평균'||cells[0].includes('평균');
-        html+=`<tr style="${isAvg?'background:var(--surface2);font-weight:700':''}">`;
-        cells.forEach(c=>{
-          const isO=c==='O',isX=c==='X';
-          const style=isO?'color:var(--green);font-weight:700':isX?'color:var(--red);font-weight:700':'';
-          html+=`<td style="padding:8px 12px;text-align:center;border-bottom:1px solid var(--border);${style}">${isO?'✅':isX?'❌':esc(c)}</td>`;
-        });
-        html+=`</tr>`;
-        continue;
-      }
-    }
-
-    if(inTable&&!/^\|/.test(trimmed)){closeTable();}
-
-    // 빈 줄
-    if(!trimmed){
-      closeFeedback();closeStudent();
-      html+=`<div style="height:5px"></div>`;
-      continue;
-    }
-
-    // 정답/정오답 단독 값 (▶1, ▶2 섹션의 값)
-    if(curSection.includes('정답')&&!curSection.includes('정오답')&&/^[①②③④⑤]/.test(trimmed)){
-      html+=`<div style="font-size:20px;font-weight:700;color:var(--accent);padding:4px 0 2px">${esc(trimmed)}</div>`;
-      continue;
-    }
-    if(curSection.includes('정오답')){
-      const isO=trimmed==='O'||trimmed==='o';
-      const isX=trimmed==='X'||trimmed==='x';
-      if(isO||isX){
-        html+=`<div style="display:block;width:fit-content;padding:5px 14px;border-radius:7px;background:${isO?'#dcfce7':'#fee2e2'};margin-top:2px">`;
-        html+=`<span style="font-size:15px;font-weight:700;color:${isO?'var(--green)':'var(--red)'}">${isO?'⭕ 정답':'❌ 오답'}</span>`;
-        html+=`</div>`;
-        continue;
-      }
-    }
-
-    // 총평 섹션 텍스트 (강점/보완/학습방향)
-    closeScoreGrid();closeFeedback();closeStudent();
-    html+=`<div style="font-size:13px;color:var(--text);line-height:1.85;padding:2px 0">${esc(trimmed)}</div>`;
-  }
-
-  closeCard();
-  container.innerHTML=html||`<div class="prob-card"><div style="padding:16px 20px;font-size:13px;color:var(--text2)">결과가 없습니다.</div></div>`;
-}
-
 
 async function downloadPDF(){
-  const btn=document.getElementById('pdfBtn');
-  const rc=document.getElementById('resultContent');
-  if(!lastRawText||!rc||!rc.children.length){alert('먼저 분석을 완료해주세요.');return;}
-  btn.textContent='⏳ 생성 중...';btn.disabled=true;
-  try{
-    const{jsPDF}=window.jspdf;
-    const d=new Date();
-    const fname=`물리1_분석결과_${d.getFullYear()}${String(d.getMonth()+1).padStart(2,'0')}${String(d.getDate()).padStart(2,'0')}.pdf`;
-    const today=d.toLocaleDateString('ko-KR');
-    const SCALE=3;
-    const PW=210,PH=297,MG=8,GAP=4;
-    const cellW=(PW-MG*2-GAP)/2;
-    // 렌더링은 화면 카드 너비(450px)로 해서 레이아웃 유지, PDF에 넣을 때 cellW로 축소
-    const RENDER_W=450;
-
-    await document.fonts.ready;
-    await new Promise(r=>setTimeout(r,300));
-
-    const allCards=Array.from(rc.children);
-    const probCards=allCards.filter(el=>el.classList.contains('prob-card'));
-    const totalCards=allCards.filter(el=>el.classList.contains('total-card'));
-
-    // 카드 캡처 (화면 너비 450px 기준으로 렌더링)
-    const captureCard=async(cardEl)=>{
-      const wrap=document.createElement('div');
-      wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
-      const cl=cardEl.cloneNode(true);
-      cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;box-sizing:border-box;';
-      cl.querySelectorAll('*').forEach(el=>{
-        el.style.maxHeight='none';
-        el.style.overflow='visible';
-      });
-      wrap.appendChild(cl);
-      document.body.appendChild(wrap);
-      try{
-        await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-        await new Promise(r=>setTimeout(r,80));
-        const canvas=await html2canvas(wrap,{
-          scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,
-          width:RENDER_W,windowWidth:RENDER_W,
-        });
-        return canvas;
-      }finally{
-        // 오류 발생해도 반드시 DOM에서 제거
-        if(document.body.contains(wrap))document.body.removeChild(wrap);
-      }
-    };
-
-    // canvas → mm 변환: 렌더링 너비(RENDER_W px) = cellW mm
-    const canvasToMmH=(canvas)=>(canvas.height/canvas.width)*cellW;
-
-    // 카드가 한 페이지를 넘으면 축소해서 맞춤
-    const MAX_ROW_H=PH-MG*2-10; // 한 행 최대 높이
-
-    const pdf=new jsPDF({orientation:'portrait',unit:'mm',format:'a4'});
-    let pageNum=1;
-    let curY=MG;
-    let isFirstPage=true;
-
-    // 문제 카드 2개씩 행으로 처리 — 각 행 높이는 두 카드 중 큰 것에 맞춤
-    for(let i=0;i<probCards.length;i+=2){
-      const c1=await captureCard(probCards[i]);
-      const c2=probCards[i+1]?await captureCard(probCards[i+1]):null;
-      let h1=canvasToMmH(c1);
-      let h2=c2?canvasToMmH(c2):0;
-      let rowH=Math.max(h1,h2);
-
-      // 행이 너무 크면 페이지 전체로 축소
-      if(rowH>MAX_ROW_H){
-        const ratio=MAX_ROW_H/rowH;
-        h1*=ratio; h2*=ratio; rowH=MAX_ROW_H;
-      }
-
-      // 현재 위치에 안 들어가면 새 페이지로
-      if(!isFirstPage&&curY+rowH>PH-MG-5){
-        pdf.setFontSize(7);pdf.setTextColor(168,164,158);pdf.setFont('helvetica','normal');
-        pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
-        pdf.text(today,PW-MG,PH-3,{align:'right'});
-        pdf.addPage();pageNum++;curY=MG;
-      }
-      isFirstPage=false;
-
-      // 행 구분선 (첫 행 제외)
-      if(curY>MG+1){
-        pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.2);
-        pdf.line(MG,curY-GAP/2,PW-MG,curY-GAP/2);
-      }
-      // 세로 중앙 구분선
-      pdf.setDrawColor(226,224,216);pdf.setLineWidth(0.2);
-      pdf.line(MG+cellW+GAP/2,curY,MG+cellW+GAP/2,curY+rowH);
-
-      pdf.addImage(c1.toDataURL('image/jpeg',0.93),'JPEG',MG,curY,cellW,h1);
-      if(c2)pdf.addImage(c2.toDataURL('image/jpeg',0.93),'JPEG',MG+cellW+GAP,curY,cellW,h2);
-      curY+=rowH+GAP;
+  const target=document.getElementById('resultContent');
+  if(!target || !target.innerHTML.trim()) return;
+  const canvas=await html2canvas(target,{scale:2,backgroundColor:'#f4f3ef'});
+  const img=canvas.toDataURL('image/jpeg',0.95);
+  const { jsPDF }=window.jspdf;
+  const pdf=new jsPDF('p','mm','a4');
+  const pw=210, ph=297;
+  const iw=pw-20, ih=canvas.height*iw/canvas.width;
+  let y=10, remaining=ih, pageHeight=ph-20;
+  if(ih<=pageHeight){ pdf.addImage(img,'JPEG',10,y,iw,ih); }
+  else {
+    let position=0;
+    const pageCanvas=document.createElement('canvas');
+    const pageCtx=pageCanvas.getContext('2d');
+    const slicePx=Math.floor(canvas.width * (pageHeight/iw));
+    while(position<canvas.height){
+      pageCanvas.width=canvas.width; pageCanvas.height=Math.min(slicePx, canvas.height-position);
+      pageCtx.clearRect(0,0,pageCanvas.width,pageCanvas.height);
+      pageCtx.drawImage(canvas,0,position,canvas.width,pageCanvas.height,0,0,canvas.width,pageCanvas.height);
+      const pageImg=pageCanvas.toDataURL('image/jpeg',0.95);
+      const drawnH=pageCanvas.height*iw/pageCanvas.width;
+      pdf.addImage(pageImg,'JPEG',10,10,iw,drawnH);
+      position += pageCanvas.height;
+      if(position<canvas.height) pdf.addPage();
     }
-
-    // 마지막 페이지 번호
-    pdf.setFontSize(7);pdf.setTextColor(168,164,158);pdf.setFont('helvetica','normal');
-    pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
-    pdf.text(today,PW-MG,PH-3,{align:'right'});
-
-    // 총평 (별도 페이지)
-    if(totalCards.length>0){
-      pdf.addPage();pageNum++;
-      const TOTAL_RENDER_W=900;
-      let ty=MG;
-      for(const card of totalCards){
-        const wrap=document.createElement('div');
-        wrap.style.cssText=`position:fixed;left:-9999px;top:0;width:${TOTAL_RENDER_W}px;background:#fff;box-sizing:border-box;font-family:'Noto Sans KR',sans-serif;`;
-        const cl=card.cloneNode(true);
-        cl.style.cssText='width:100%;margin:0;border-radius:8px;box-shadow:none;';
-        cl.querySelectorAll('*').forEach(el=>{el.style.maxHeight='none';el.style.overflow='visible';});
-        wrap.appendChild(cl);
-        document.body.appendChild(wrap);
-        let canvas;
-        try{
-          await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));
-          await new Promise(r=>setTimeout(r,80));
-          canvas=await html2canvas(wrap,{scale:SCALE,useCORS:true,backgroundColor:'#fff',logging:false,width:TOTAL_RENDER_W,windowWidth:TOTAL_RENDER_W});
-        }finally{
-          if(document.body.contains(wrap))document.body.removeChild(wrap);
-        }
-        const fw=PW-MG*2;
-        let fh=canvas.height/canvas.width*fw;
-        // 총평 카드도 페이지 높이 초과 시 축소
-        if(fh>PH-MG*2){const r=(PH-MG*2)/fh;fh=PH-MG*2;}
-        if(ty+fh>PH-MG){pdf.addPage();pageNum++;ty=MG;}
-        pdf.addImage(canvas.toDataURL('image/jpeg',0.95),'JPEG',MG,ty,fw,fh);
-        ty+=fh+GAP;
-      }
-      pdf.setFontSize(7);pdf.setTextColor(168,164,158);
-      pdf.text(`${pageNum}`,PW/2,PH-3,{align:'center'});
-      pdf.text(today,PW-MG,PH-3,{align:'right'});
-    }
-
-    pdf.save(fname);
-  }catch(e){
-    alert('PDF 생성 오류: '+e.message);console.error(e);
-  }finally{
-    btn.textContent='⬇ PDF 저장';btn.disabled=false;
   }
+  pdf.save('physics-analysis.pdf');
 }
 
-initAnswerUI();
+window.addEventListener('load', initAnswerUI);
 </script>
 </body>
 </html>
