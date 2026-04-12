@@ -160,49 +160,68 @@ const MOCK_JSON = {
 
 
 const SYSTEM_DIRECT = `당신은 고등학교 물리 교사입니다.
-첨부된 이미지(해설 사진, 학생 풀이 사진)를 직접 보고 분析 결과 JSON 1개만 출력합니다.
-절대 규칙: 응답의 첫 글자는 반드시 { 이어야 합니다. 마크다운 펜스·설명 문장 금지.
+첨부 이미지(해설, 학생 풀이, 문제)를 직접 보고 JSON 1개만 출력합니다.
+절대 규칙: 첫 글자는 반드시 {. 마크다운 펜스·설명 금지.
 
-━━━ 이미지 읽기 규칙 ━━━
-- 해설 이미지: 정답(동그라미/체크), 풀이 단계, 수식, 그림·화살표·거리 표기를 전부 읽을 것
-- 학생 풀이 이미지: 손글씨 식·계산·그림·화살표·최종 답을 전부 읽을 것
-- 분수: 가로선 위=분자, 아래=분모. 절대 임의로 바꾸지 말 것 (5/3을 4/3으로 읽는 것 금지)
-- 이미지 하단·여백·구석의 작은 글씨도 빠짐없이 읽을 것
-- 지워진 내용(선 긋기)은 무시하고 최종 남은 내용만 반영
+━━━ 해설 이미지 읽기 ━━━
+- 풀이 단계를 이미지에 보이는 순서 그대로 전부 추출 (생략·요약·재구성 절대 금지)
+- 분수: 가로선 위=분자, 아래=분모 (5/3을 4/3으로 읽는 것 금지)
+- 수식에 나오는 숫자·단위·기호를 원문 그대로
+- 이미지 하단·여백·구석 작은 글씨도 포함
+- 해설에 없는 내용 절대 추가 금지
+
+━━━ 학생 풀이 이미지 읽기 ━━━
+- 손글씨 식·계산·그림·화살표·최종 답을 전부 추출
+- 지워진 내용(선 긋기)은 무시, 최종 남은 내용만
+- 분수 동일 규칙 적용
 
 ━━━ 판정 기준 ━━━
-"일치": 해설과 같은 방식·결과 / "풀이가 다름": 정답은 맞으나 접근 다름
-"오류 있음": 틀린 식·개념 오류 / "입력 필요": 정답·학생선택 정보 없음
-"분析 제외": 이미지 불명확해 분析 불가
+"일치": 해설과 같은 방식·결과
+"풀이가 다름": 정답은 맞으나 접근이 다름
+"오류 있음": 틀린 식·개념 오류 존재
+"입력 필요": 정답·학생선택 정보 없음
+"분析 제외": 이미지 불명확해 비교 불가
 
 ━━━ 피드백 형식 (케이스별 필수) ━━━
-"일치" → evaluation:"해설과 동일한 접근으로 정확하게 풀었습니다." / improvement:"없음."
-"풀이가 다름" → evaluation:"N단계에서 학생:[학생식] vs 해설:[해설식]. 결과는 맞았으나 논리가 다릅니다." / improvement:한 문장
-"오류 있음" → evaluation:"N단계에서 오류 — 학생:[학생식] / 해설:[해설식]. [물리적 원인]" / improvement:구체적 방지법
-추상 표현 금지. 수식 직접 대조 필수. LaTeX 금지. 분수=분자/분모, 곱셈=×
+【일치】
+  evaluation: "해설과 동일한 접근으로 정확하게 풀었습니다."
+  improvement: "없음."
+
+【풀이가 다름】
+  evaluation: "N단계에서 학생: [학생 실제 식] / 해설: [해설 실제 식]. 결과는 맞았으나 접근이 다릅니다."
+  improvement: 해설 방식이 더 명확한 이유 한 문장. 추상 표현 금지.
+
+【오류 있음】
+  evaluation: "N단계에서 오류 — 학생: [학생 실제 식] / 해설: [해설 실제 식]. [물리적 원인 한 문장]"
+  improvement: 이 오류를 방지하는 구체적 방법 한 문장.
+
+피드백 공통 규칙:
+- 반드시 이미지에서 읽은 실제 수식을 직접 인용해 대조
+- "잘못 세웠습니다" 같은 추상 표현 금지
+- LaTeX 금지. 분수=분자/분모, 곱셈=×
+- 불필요한 배경 설명 금지. 핵심 오류 지점만 간결하게
 
 ━━━ 역량 점수 ━━━
 "일치": concept/process/interpretation 모두 8~10점
 "풀이가 다름": 관련 항목 6~8점, 나머지 8~10점
-"오류 있음": 오류 항목 1~6점. 틀린 식 직접 언급
+"오류 있음": 오류 발생 항목 1~6점. 반드시 틀린 식 직접 인용
 
 ━━━ 정오답 판단 ━━━
-[정답]·[학생 선택] 텍스트 제공 시 그것만 사용. 없으면 "입력 필요".
+[정답]·[학생 선택] 텍스트가 주어진 경우만 사용. 이미지 내용으로 추론 금지. 없으면 "입력 필요".
 
-반드시 아래 JSON 스키마로 출력 (problems 배열에 이 문제 1개만):
+JSON 스키마 (problems 배열에 이 문제 1개만):
 {
   "problems":[{
     "number":1,
     "answer":"①",
     "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분析 제외",
-    "solution_steps":["단계1","단계2"],
-    "student_summary":{"equation":"학생 식","calculation":"학생 계산","drawing":"그림/화살표","final_answer":"최종 답"},
-    "feedback":{"evaluation":"...","improvement":"..."},
-    "scores":{"concept":0,"concept_reason":"...","process":0,"process_reason":"...","interpretation":0,"interpretation_reason":"..."}
+    "solution_steps":["이미지에서 읽은 단계1 (원문 그대로)","단계2",...],
+    "student_summary":{"equation":"학생 실제 식","calculation":"학생 계산","drawing":"그림/화살표 설명","final_answer":"최종 답"},
+    "feedback":{"evaluation":"실제 식 인용한 평가","improvement":"구체적 방법"},
+    "scores":{"concept":0,"concept_reason":"실제 식 인용","process":0,"process_reason":"...","interpretation":0,"interpretation_reason":"..."}
   }],
   "total":{"strengths":"","weaknesses":"","study_direction":""}
-}
-JSON 외 다른 문장 절대 금지. { 로 시작하고 } 로 끝납니다.`
+}`
 
 const SYSTEM_ANALYSIS = `당신은 고등학교 물리 교사입니다. 출력은 반드시 JSON 한 개만 반환합니다.
 절대 규칙: 응답의 첫 글자는 반드시 { 이어야 합니다. \`\`\`json 같은 마크다운 펜스, 설명 문장, 전처리 텍스트를 절대 출력하지 마세요.
@@ -522,22 +541,9 @@ const SYSTEM_CROP = `이미지에 2×2 격자로 배치된 4개의 문제 구역
 
 // 이미지를 Gemini로 보내 2×2 grid 좌표 탐지
 async function detectGridCoords(file) {
-  try {
-    const compressed = await compressImage(file, 'solution');
-    const parts = [
-      {type:'text', text:'이 이미지에서 2×2로 배치된 문제 구역의 경계를 찾아 JSON으로 반환하세요.'},
-      {type:'image', source:{type:'base64', media_type:compressed.mediaType, data:compressed.base64}}
-    ];
-    const raw = await callProxy({parts, system:SYSTEM_CROP, model:MODEL.analysis});
-    const j = robustJsonParse(raw);
-    return {
-      cols: j.cols || [0.0, 0.5],
-      rows: j.rows || [0.0, 0.5]
-    };
-  } catch(e) {
-    console.warn('grid 탐지 실패, 기본값 사용:', e);
-    return {cols:[0.0, 0.5], rows:[0.0, 0.5]};
-  }
+  // AI 탐지 대신 정확한 중앙(50%) 고정 분할
+  // → 오탐 없음, API 호출 절감, 속도 향상
+  return {cols:[0.0, 0.5], rows:[0.0, 0.5]};
 }
 
 // Canvas로 이미지를 grid에 맞게 잘라 file 객체 배열로 반환
@@ -590,11 +596,8 @@ async function autoCropFiles(files, setMsg, label) {
     const f = files[i];
     if (f.isPdf) { allCropped.push(f); continue; }
 
-    setMsg(`${label} 구역 탐지 중 (${i+1}/${files.length})...<br><span class="small muted">2×2 격자 경계를 AI가 찾습니다</span>`);
-    const coords = await detectGridCoords(f);
-    await sleep(10000); // quota 대기
-
-    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">문제별로 잘라냅니다</span>`);
+    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">2×2로 문제별 분할합니다</span>`);
+    const coords = await detectGridCoords(f); // 고정 50/50, 즉시 반환
     const pieces = await cropImageToGrid(f, coords);
     allCropped.push(...pieces);
   }
