@@ -142,7 +142,7 @@ let lastAnalysisJson = null;
 const MODEL = {
   ocr: 'gemini-2.5-flash-lite',
   analysis: 'gemini-2.5-flash-lite',
-  fallback: 'gemini-2.5-flash'  // quota 초과 시 상위 모델로 전환
+  fallback: 'gemini-2.5-flash-lite'  // 무료 모델 고정
 };
 
 const MOCK_JSON = {
@@ -340,10 +340,6 @@ function renderPreviews(key){
 function openLightbox(src){document.getElementById('lightboxImg').src=src;document.getElementById('lightbox').classList.add('open');}
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
 function goBack(){
-  // 정답/학생선택 초기화 (이전 값 잔류로 정오답 오판 방지)
-  Object.keys(correctAnswers).forEach(k=>delete correctAnswers[k]);
-  Object.keys(studentAnswers).forEach(k=>delete studentAnswers[k]);
-  initAnswerUI();
   document.getElementById('resultView').classList.remove('visible');
   document.getElementById('inputView').style.display='block';
   document.getElementById('bottomBar').style.display='flex';
@@ -541,69 +537,79 @@ const SYSTEM_CROP = `이미지에 2×2 격자로 배치된 4개의 문제 구역
 
 // 이미지를 Gemini로 보내 2×2 grid 좌표 탐지
 async function detectGridCoords(file) {
-  // AI 탐지 대신 정확한 중앙(50%) 고정 분할
-  // → 오탐 없음, API 호출 절감, 속도 향상
+  // 현재는 사용자가 원하는 고정 2×2 분할을 사용합니다.
+  // 다만 경계 잘림을 줄이기 위해 crop 단계에서 overlap padding을 추가합니다.
   return {cols:[0.0, 0.5], rows:[0.0, 0.5]};
 }
 
 // Canvas로 이미지를 grid에 맞게 잘라 file 객체 배열로 반환
-// 반환 순서: [좌상(1번), 우상(2번), 좌하(3번), 우하(4번)]  ← 문제지 배치 기준
+// 반환 순서: [좌상(1번), 우상(2번), 좌하(3번), 우하(4번)]
 async function cropImageToGrid(file, coords) {
-  if (file.isPdf) return [file]; // PDF는 crop 불가
+  if (file.isPdf) return [file];
 
   return new Promise(resolve => {
     const img = new Image();
     img.onload = () => {
       const W = img.width, H = img.height;
       const {cols, rows} = coords;
-
-      // col/row 비율 → 픽셀 경계값
       const xCuts = [...cols.map(c => Math.round(c * W)), W];
       const yCuts = [...rows.map(r => Math.round(r * H)), H];
-
       const cropped = [];
+
       for (let ri = 0; ri < yCuts.length - 1; ri++) {
         for (let ci = 0; ci < xCuts.length - 1; ci++) {
-          const x = xCuts[ci], y = yCuts[ri];
-          const w = xCuts[ci+1] - x, h = yCuts[ri+1] - y;
+          const rawX = xCuts[ci], rawY = yCuts[ri];
+          const rawW = xCuts[ci+1] - rawX, rawH = yCuts[ri+1] - rawY;
+          const padX = Math.round(rawW * 0.08);
+          const padY = Math.round(rawH * 0.08);
+          const x = Math.max(0, rawX - padX);
+          const y = Math.max(0, rawY - padY);
+          const w = Math.min(W - x, rawW + padX * 2);
+          const h = Math.min(H - y, rawH + padY * 2);
+
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
           const ctx = canvas.getContext('2d');
           ctx.drawImage(img, x, y, w, h, 0, 0, w, h);
-          const base64 = canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+          const base64 = canvas.toDataURL('image/jpeg', 0.94).split(',')[1];
           cropped.push({
             ...file,
             base64,
             mediaType: 'image/jpeg',
-            name: file.name.replace(/\.[^.]+$/, '') + `_crop${ri*( xCuts.length-1)+ci+1}.jpg`
+            name: file.name.replace(/\.[^.]+$/, '') + `_crop${ri*(xCuts.length-1)+ci+1}.jpg`,
+            _fromAutoCrop: true,
+            _sourceIndex: file._sourceIndex ?? 0,
+            _cropIndex: ri*(xCuts.length-1)+ci+1
           });
         }
       }
-      resolve(cropped.length > 0 ? cropped : [file]);
+      resolve(cropped.length > 0 ? cropped : [{...file, _fromAutoCrop:false}]);
     };
-    img.onerror = () => resolve([file]);
+    img.onerror = () => resolve([{...file, _fromAutoCrop:false}]);
     img.src = `data:${file.mediaType};base64,${file.base64}`;
   });
 }
 
 // 파일 배열 전체를 grid crop → 문제 번호 순으로 평탄화
-// 파일이 1장이면 crop, 여러 장이면 각각 crop 후 합산
+// 여러 장이 입력되어도 모든 이미지를 2×2로 자동 분할합니다.
 async function autoCropFiles(files, setMsg, label) {
   if (!files.length) return [];
 
   const allCropped = [];
   for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    if (f.isPdf) { allCropped.push(f); continue; }
+    const f = {...files[i], _sourceIndex:i};
+    if (f.isPdf) {
+      allCropped.push(f);
+      continue;
+    }
 
-    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">2×2로 문제별 분할합니다</span>`);
-    const coords = await detectGridCoords(f); // 고정 50/50, 즉시 반환
+    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">모든 이미지에 2×2 자동 분할을 적용합니다</span>`);
+    const coords = await detectGridCoords(f);
     const pieces = await cropImageToGrid(f, coords);
     allCropped.push(...pieces);
   }
   return allCropped;
 }
-
 
 async function compressImage(file, mode='solution'){
   if(file.isPdf) return file;
@@ -887,7 +893,7 @@ async function analyze(){
         };
       }
       problemResults.push(probData);
-      if(i<maxProblems-1) await sleep(10000);
+      if(i<maxProblems-1) await sleep(2000);
     }
 
     // ── Step 3: 총평 ──
@@ -940,30 +946,48 @@ function finishRender(data, rc){
 async function downloadPDF(){
   const target=document.getElementById('resultContent');
   if(!target || !target.innerHTML.trim()) return;
-  const canvas=await html2canvas(target,{scale:2,backgroundColor:'#f4f3ef'});
-  const img=canvas.toDataURL('image/jpeg',0.95);
+
   const { jsPDF }=window.jspdf;
   const pdf=new jsPDF('p','mm','a4');
-  const pw=210, ph=297;
-  const iw=pw-20, ih=canvas.height*iw/canvas.width;
-  let y=10, remaining=ih, pageHeight=ph-20;
-  if(ih<=pageHeight){ pdf.addImage(img,'JPEG',10,y,iw,ih); }
-  else {
-    let position=0;
-    const pageCanvas=document.createElement('canvas');
-    const pageCtx=pageCanvas.getContext('2d');
-    const slicePx=Math.floor(canvas.width * (pageHeight/iw));
-    while(position<canvas.height){
-      pageCanvas.width=canvas.width; pageCanvas.height=Math.min(slicePx, canvas.height-position);
-      pageCtx.clearRect(0,0,pageCanvas.width,pageCanvas.height);
-      pageCtx.drawImage(canvas,0,position,canvas.width,pageCanvas.height,0,0,canvas.width,pageCanvas.height);
-      const pageImg=pageCanvas.toDataURL('image/jpeg',0.95);
-      const drawnH=pageCanvas.height*iw/pageCanvas.width;
-      pdf.addImage(pageImg,'JPEG',10,10,iw,drawnH);
-      position += pageCanvas.height;
-      if(position<canvas.height) pdf.addPage();
-    }
+  const pageW=210, pageH=297;
+  const margin=10;
+  const gap=6;
+  const usableW=pageW-(margin*2);
+  const slotH=(pageH-(margin*2)-gap)/2;
+
+  const cards=Array.from(target.children).filter(el=>
+    el.classList.contains('result-card') || el.classList.contains('warn-card')
+  );
+  if(!cards.length) return;
+
+  const renderCard = async (el) => {
+    return await html2canvas(el, {
+      scale: 2,
+      backgroundColor: '#f4f3ef',
+      useCORS: true,
+      logging: false,
+      windowWidth: document.documentElement.scrollWidth
+    });
+  };
+
+  let slotIndex=0;
+  for(let i=0;i<cards.length;i++){
+    if(i>0 && slotIndex===0) pdf.addPage();
+    const canvas=await renderCard(cards[i]);
+    const img=canvas.toDataURL('image/jpeg',0.95);
+
+    const widthRatio=usableW/canvas.width;
+    const heightRatio=slotH/canvas.height;
+    const ratio=Math.min(widthRatio,heightRatio);
+    const drawW=canvas.width*ratio;
+    const drawH=canvas.height*ratio;
+    const x=margin + (usableW-drawW)/2;
+    const y=margin + (slotIndex*(slotH+gap)) + (slotH-drawH)/2;
+
+    pdf.addImage(img,'JPEG',x,y,drawW,drawH);
+    slotIndex=(slotIndex+1)%2;
   }
+
   pdf.save('physics-analysis.pdf');
 }
 
