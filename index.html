@@ -142,7 +142,7 @@ let lastAnalysisJson = null;
 const MODEL = {
   ocr: 'gemini-2.5-flash-lite',
   analysis: 'gemini-2.5-flash-lite',
-  fallback: 'gemini-2.5-flash-lite'  // 무료 모델 유지
+  fallback: 'gemini-2.5-flash'  // quota 초과 시 상위 모델로 전환
 };
 
 const MOCK_JSON = {
@@ -180,7 +180,7 @@ const SYSTEM_DIRECT = `당신은 고등학교 물리 교사입니다.
 "풀이가 다름": 정답은 맞으나 접근이 다름
 "오류 있음": 틀린 식·개념 오류 존재
 "입력 필요": 정답·학생선택 정보 없음
-"분析 제외": 이미지 불명확해 비교 불가
+"분석 제외": 이미지가 완전히 판독 불가능한 경우만. 일부라도 보이면 반드시 분석 진행
 
 ━━━ 피드백 형식 (케이스별 필수) ━━━
 【일치】
@@ -214,7 +214,7 @@ JSON 스키마 (problems 배열에 이 문제 1개만):
   "problems":[{
     "number":1,
     "answer":"①",
-    "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분析 제외",
+    "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분석 제외",
     "solution_steps":["이미지에서 읽은 단계1 (원문 그대로)","단계2",...],
     "student_summary":{"equation":"학생 실제 식","calculation":"학생 계산","drawing":"그림/화살표 설명","final_answer":"최종 답"},
     "feedback":{"evaluation":"실제 식 인용한 평가","improvement":"구체적 방법"},
@@ -340,6 +340,10 @@ function renderPreviews(key){
 function openLightbox(src){document.getElementById('lightboxImg').src=src;document.getElementById('lightbox').classList.add('open');}
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
 function goBack(){
+  // 정답/학생선택 초기화 (이전 값 잔류로 정오답 오판 방지)
+  Object.keys(correctAnswers).forEach(k=>delete correctAnswers[k]);
+  Object.keys(studentAnswers).forEach(k=>delete studentAnswers[k]);
+  initAnswerUI();
   document.getElementById('resultView').classList.remove('visible');
   document.getElementById('inputView').style.display='block';
   document.getElementById('bottomBar').style.display='flex';
@@ -347,12 +351,6 @@ function goBack(){
 
 function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
 function escapeHtml(s=''){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
-function formatMathHtml(s=''){
-  const esc = escapeHtml(fixLatex(String(s||'')));
-  return esc
-    .replace(/(^|[^A-Za-z])([A-Za-z])(?![A-Za-z])/g, '$1<i style="font-style:italic">$2</i>')
-    .replace(/\bx\b/g, '<i style="font-style:italic">x</i>');
-}
 function fixLatex(s=''){
   // OCR이 LaTeX로 출력한 경우 일반 텍스트로 변환
   let r=String(s);
@@ -399,7 +397,7 @@ function scoreBandBySimilarity(sim){
 }
 
 function applyWeightedScores(problem){
-  const p=hardenProblemNumerics(problem);
+  const p=JSON.parse(JSON.stringify(problem));
   const solutionText=(p.solution_steps||[]).join(' ; ');
   const studentText=[p.student_summary?.equation,p.student_summary?.calculation,p.student_summary?.final_answer].filter(Boolean).join(' ; ');
   const sim=calcSimilarity(solutionText, studentText, '', p.student_summary?.drawing||'');
@@ -440,16 +438,26 @@ function applyWeightedScores(problem){
   const solutionLen=normalizeText(solutionText).length;
   const studentLen=normalizeText(studentText).length + normalizeText(p.student_summary?.drawing||'').length;
   const hasCoreEquation = extractMathTokens(p.student_summary?.equation||'').length >= 3;
-  const lowConfidence = sim < 0.45 || solutionLen < 20 || studentLen < 10 || (!hasCoreEquation && sim < 0.55);
-  if(lowConfidence){
-    concept=Math.max(1, concept || 1);
-    process=Math.max(1, process || 1);
-    interpret=Math.max(1, interpret || 1);
-    p.low_confidence = true;
-    p.judgement = p.judgement === '일치' ? '풀이가 다름' : (p.judgement || '풀이가 다름');
+  // 이미지 직접 분석 모드: AI가 이미지를 보고 직접 판단하므로
+  // 텍스트 유사도(sim)만으로 분석 제외하지 않음 — AI 판단을 신뢰
+  // 이미지 분석 자체 실패한 경우만 제외
+  const isAnalysisFailed = (p.solution_steps||[]).some(s => s.includes('분석 실패') || s.includes('이미지 분석 실패'));
+  const lowConfidence = sim < 0.45 && solutionLen < 20 && studentLen < 10;
+  if(isAnalysisFailed){
+    p.judgement='분석 제외';
+    concept=0; process=0; interpret=0;
     p.feedback = p.feedback || {};
-    p.feedback.evaluation = p.feedback.evaluation || '근거가 부족하지만 확인 가능한 식·계산·그림 기준으로 풀이를 비교했습니다.';
-    p.feedback.improvement = p.feedback.improvement || '식, 숫자, 그림이 더 잘 보이게 촬영하면 더 정확한 분석이 가능합니다.';
+    p.feedback.evaluation = '이미지 인식에 실패했습니다. 사진을 더 선명하게 찍어 다시 올려 주세요.';
+    p.feedback.improvement = '해설과 학생 풀이를 각각 따로 선명하게 촬영해 주세요.';
+  } else if(lowConfidence){
+    concept=Math.max(1, concept);
+    process=Math.max(1, process);
+    interpret=Math.max(1, interpret);
+    p.low_confidence = true;
+    if(!p.judgement || p.judgement==='입력 필요') p.judgement='풀이가 다름';
+    p.feedback = p.feedback || {};
+    if(!p.feedback.evaluation) p.feedback.evaluation='근거가 일부 부족하지만 확인 가능한 식·계산 기준으로 비교했습니다.';
+    if(!p.feedback.improvement) p.feedback.improvement='식과 그림이 더 잘 보이도록 촬영하면 더 정확한 분석이 가능합니다.';
   }
 
   p.scores = p.scores || {};
@@ -469,7 +477,7 @@ function buildReason(kind,p,sim,base=''){
   const stuEq=p.student_summary?.equation||'';
   const stuCalc=p.student_summary?.calculation||'';
   const drawing=p.student_summary?.drawing||'';
-  if(p.low_confidence) return '근거가 부족한 상태에서 확인 가능한 식·계산·그림 기준으로 보수적으로 점수를 산정했습니다.';
+  if(p.judgement==='분석 제외') return '비교 근거가 부족해 점수를 산정하지 않았습니다.';
   if(kind==='개념'){
     if(p.judgement==='일치') return '해설 핵심 식과 학생 식의 일치도가 높고 핵심 개념 적용이 안정적입니다.';
     if(p.judgement==='풀이가 다름') return `해설 핵심 식과 학생 식이 부분적으로만 겹칩니다. 유사도 ${Math.round(sim*100)}% 수준입니다.`;
@@ -485,72 +493,6 @@ function buildReason(kind,p,sim,base=''){
   return '그림 또는 조건 해석 근거가 부족하거나 해설의 핵심 요소와 다릅니다.';
 }
 function trimForReason(s=''){s=safeText(s); return s.length>42?s.slice(0,42)+'…':s;}
-
-function extractNumericForms(s=''){
-  const src = fixLatex(String(s||''));
-  const forms = [];
-  const matches = src.match(/\b\d+\s*\/\s*\d+\b|\b\d+(?:\.\d+)?\s*(?:N|kg|g|cm|mm|m|L|J|s|초|개)?\b/gi) || [];
-  for(const m of matches){
-    const v = m.replace(/\s+/g,'').trim();
-    if(v) forms.push(v);
-  }
-  return [...new Set(forms)];
-}
-
-function maybeCloseNumericToken(token, ref){
-  const t = String(token||'').replace(/\s+/g,'');
-  const r = String(ref||'').replace(/\s+/g,'');
-  if(!t || !r || t === r) return false;
-  const tNum = t.replace(/[^0-9./-]/g,'');
-  const rNum = r.replace(/[^0-9./-]/g,'');
-  if(!tNum || !rNum) return false;
-  if(tNum === rNum) return true;
-  if((tNum.includes('/') && rNum.includes('/')) || (!tNum.includes('/') && !rNum.includes('/'))){
-    const ta = tNum.split('/').map(v=>Number(v));
-    const ra = rNum.split('/').map(v=>Number(v));
-    if(ta.every(Number.isFinite) && ra.every(Number.isFinite) && ta.length === ra.length){
-      return ta.every((v,i)=>Math.abs(v-ra[i]) <= 2);
-    }
-  }
-  const a = Number(tNum), b = Number(rNum);
-  return Number.isFinite(a) && Number.isFinite(b) && Math.abs(a-b) <= 2;
-}
-
-function correctNumericText(text='', referenceForms=[]){
-  let out = fixLatex(String(text||''));
-  if(!referenceForms.length) return out;
-  const refs = [...new Set(referenceForms)];
-  const candidates = out.match(/\b\d+\s*\/\s*\d+\b|\b\d+(?:\.\d+)?\s*(?:N|kg|g|cm|mm|m|L|J|s|초|개)?\b/gi) || [];
-  for(const raw of candidates){
-    const token = raw.replace(/\s+/g,'');
-    if(refs.includes(token)) continue;
-    const near = refs.find(r => maybeCloseNumericToken(token, r));
-    if(near){
-      out = out.replace(raw, near);
-    }
-  }
-  return out;
-}
-
-function hardenProblemNumerics(problem){
-  if(!problem) return problem;
-  const p = JSON.parse(JSON.stringify(problem));
-  const solutionRef = [
-    ...(p.solution_steps || []),
-    p.feedback?.evaluation || '',
-    p.feedback?.improvement || ''
-  ].join(' ; ');
-  const refForms = extractNumericForms(solutionRef);
-  p.student_summary = p.student_summary || {};
-  p.student_summary.equation = correctNumericText(p.student_summary.equation || '', refForms);
-  p.student_summary.calculation = correctNumericText(p.student_summary.calculation || '', refForms);
-  p.student_summary.drawing = correctNumericText(p.student_summary.drawing || '', refForms);
-  p.student_summary.final_answer = correctNumericText(p.student_summary.final_answer || '', refForms);
-  p.feedback = p.feedback || {};
-  p.feedback.evaluation = correctNumericText(p.feedback.evaluation || '', refForms);
-  p.feedback.improvement = correctNumericText(p.feedback.improvement || '', refForms);
-  return p;
-}
 
 function parseProblemsFromOCR(text){
   const blocks=[];
@@ -633,18 +575,10 @@ async function cropImageToGrid(file, coords) {
       const yCuts = [...rows.map(r => Math.round(r * H)), H];
 
       const cropped = [];
-      const padRatio = 0.12;
       for (let ri = 0; ri < yCuts.length - 1; ri++) {
         for (let ci = 0; ci < xCuts.length - 1; ci++) {
-          const rawX = xCuts[ci], rawY = yCuts[ri];
-          const rawW = xCuts[ci+1] - rawX, rawH = yCuts[ri+1] - rawY;
-          const padX = Math.round(rawW * padRatio);
-          const padY = Math.round(rawH * padRatio);
-          const x = Math.max(0, rawX - padX);
-          const y = Math.max(0, rawY - padY);
-          const x2 = Math.min(W, rawX + rawW + padX);
-          const y2 = Math.min(H, rawY + rawH + padY);
-          const w = Math.max(1, x2 - x), h = Math.max(1, y2 - y);
+          const x = xCuts[ci], y = yCuts[ri];
+          const w = xCuts[ci+1] - x, h = yCuts[ri+1] - y;
           const canvas = document.createElement('canvas');
           canvas.width = w; canvas.height = h;
           const ctx = canvas.getContext('2d');
@@ -767,7 +701,7 @@ function robustJsonParse(text){
   }
 
   console.error('[JSON 파싱 최종 실패] 전체 응답:', text);
-  throw new Error('분析 결과 JSON 파싱에 실패했습니다. (AI 응답 형식 오류 — 다시 시도해 주세요)');
+  throw new Error('분석 결과 JSON 파싱에 실패했습니다. (AI 응답 형식 오류 — 다시 시도해 주세요)');
 }
 
 function renderResults(data){
@@ -776,28 +710,28 @@ function renderResults(data){
   data.problems=weighted;
   lastAnalysisJson=data;
 
-  const lowConfidence=weighted.filter(p=>p.low_confidence);
-  const active=weighted;
+  const excluded=weighted.filter(p=>p.judgement==='분석 제외');
+  const active=weighted.filter(p=>p.judgement!=='분석 제외');
   const avg=(arr,key)=>arr.length?(arr.reduce((s,p)=>s+(p.scores?.[key]||0),0)/arr.length).toFixed(1):'0.0';
   let html='';
-  if(lowConfidence.length){
-    html += `<div class="warn-card"><div class="warn-body"><b>주의</b><br>${lowConfidence.map(p=>`${p.number}번`).join(', ')} 문제는 비교 근거가 부족해 보수적으로 분석했습니다. 그래도 최소 피드백은 유지했습니다.</div></div>`;
+  if(excluded.length){
+    html += `<div class="warn-card"><div class="warn-body"><b>제외된 문제</b><br>${excluded.map(p=>`${p.number}번`).join(', ')} 문제는 해설/학생 풀이 근거가 너무 약해 자동 제외했습니다.</div></div>`;
   }
   weighted.forEach(p=>{
     html += `<div class="result-card"><div class="result-card-header">문제 ${p.number} 피드백</div><div class="result-card-body">`;
     html += `<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">${escapeHtml(p.answer||'-')}</div></div>`;
     html += `<div class="sec"><div class="sec-title">2. 판정</div><div class="box">${escapeHtml(p.judgement||'입력 필요')} <span class="mono small muted">| 유사도 ${Math.round((p.similarity||0)*100)}% · ${escapeHtml(p.similarity_band||'-')}</span></div></div>`;
     html += `<div class="sec"><div class="sec-title">3. 해설 풀이 정리</div>`;
-    (p.solution_steps||[]).forEach((step,idx)=>{ html += `<div class="step"><div class="step-num">${idx+1}</div><div>${formatMathHtml(step)}</div></div>`; });
+    (p.solution_steps||[]).forEach((step,idx)=>{ html += `<div class="step"><div class="step-num">${idx+1}</div><div>${escapeHtml(fixLatex(step))}</div></div>`; });
     html += `</div>`;
     html += `<div class="sec"><div class="sec-title">4. 학생 풀이 정리</div><div class="box">`
-      + `<div><b>학생이 세운 식:</b> ${formatMathHtml(p.student_summary?.equation||'-')}</div>`
-      + `<div><b>학생의 계산 과정:</b> ${formatMathHtml(p.student_summary?.calculation||'-')}</div>`
-      + `<div><b>학생의 그림/도형:</b> ${formatMathHtml(p.student_summary?.drawing||'-')}</div>`
-      + `<div><b>학생의 최종 답:</b> ${formatMathHtml(p.student_summary?.final_answer||'-')}</div></div></div>`;
+      + `<div><b>학생이 세운 식:</b> ${escapeHtml(p.student_summary?.equation||'-')}</div>`
+      + `<div><b>학생의 계산 과정:</b> ${escapeHtml(p.student_summary?.calculation||'-')}</div>`
+      + `<div><b>학생의 그림/도형:</b> ${escapeHtml(p.student_summary?.drawing||'-')}</div>`
+      + `<div><b>학생의 최종 답:</b> ${escapeHtml(p.student_summary?.final_answer||'-')}</div></div></div>`;
     html += `<div class="sec"><div class="sec-title">5. 풀이 피드백</div><div class="box">`
-      + `<div><b>해설 기준 평가:</b> ${formatMathHtml(p.feedback?.evaluation||'-')}</div>`
-      + `<div style="margin-top:6px"><b>개선점:</b> ${formatMathHtml(p.feedback?.improvement||'-')}</div></div></div>`;
+      + `<div><b>해설 기준 평가:</b> ${escapeHtml(fixLatex(p.feedback?.evaluation||'-'))}</div>`
+      + `<div style="margin-top:6px"><b>개선점:</b> ${escapeHtml(p.feedback?.improvement||'-')}</div></div></div>`;
     html += `<div class="sec"><div class="sec-title">6. 역량 점수</div><div class="score-grid">`
       + scoreCell('개념 이해도', p.scores?.concept||0, p.scores?.concept_reason||'')
       + scoreCell('풀이 전개력', p.scores?.process||0, p.scores?.process_reason||'')
@@ -821,7 +755,7 @@ function renderResults(data){
 }
 
 function scoreCell(label,val,reason){
-  return `<div class="score-cell"><div class="score-label">${escapeHtml(label)}</div><div class="score-val">${val}</div><div class="small muted">/ ${label==='합계'?'30':'10'}점</div><div class="score-reason">${formatMathHtml(reason)}</div></div>`;
+  return `<div class="score-cell"><div class="score-label">${escapeHtml(label)}</div><div class="score-val">${val}</div><div class="small muted">/ ${label==='합계'?'30':'10'}점</div><div class="score-reason">${escapeHtml(reason)}</div></div>`;
 }
 
 async function analyze(){
@@ -844,7 +778,7 @@ async function analyze(){
   const rc=document.getElementById('resultContent');
 
   rc.innerHTML = '<div class="loading"><div class="spinner"></div>'
-    + '<div id="loadingText">분析 준비 중...</div>'
+    + '<div id="loadingText">분석 준비 중...</div>'
     + '<div id="progressBar" style="margin-top:14px;width:260px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
     + '<div id="progressFill" style="height:100%;background:var(--accent);width:0%;transition:width 0.5s ease"></div></div>'
     + '<div id="progressLabel" style="font-size:11px;color:var(--text3);margin-top:6px"></div></div>';
@@ -867,9 +801,9 @@ async function analyze(){
     // ── 텍스트만 입력 ──
     const hasImages = store.a.length || store.s.length;
     if(!hasImages){
-      setMsg('텍스트 분析 중...', 10);
+      setMsg('텍스트 분석 중...', 10);
       const parts=[];
-      if(rangeText) parts.push({type:'text',text:`[분析 범위]\n${rangeText}`});
+      if(rangeText) parts.push({type:'text',text:`[분석 범위]\n${rangeText}`});
       if(qT) parts.push({type:'text',text:`[문제]\n${qT}`});
       if(aT) parts.push({type:'text',text:`[해설]\n${aT}`});
       if(sT) parts.push({type:'text',text:`[학생 풀이]\n${sT}`});
@@ -894,14 +828,14 @@ async function analyze(){
     const maxProblems = Math.max(solCropped.length, stuCropped.length, 1);
     setLabel(`총 ${maxProblems}문제 감지됨`);
 
-    // ── Step 2: 문제별 직접 분析 ──
+    // ── Step 2: 문제별 직접 분석 ──
     const problemResults=[];
 
     for(let i=0; i<maxProblems; i++){
       const probNum = i+1;
       const pct = 20 + Math.round((i/maxProblems)*65);
       setMsg(
-        `문제 ${probNum}/${maxProblems} 분析 중...<br><span class="small muted">해설·학생 풀이·문제를 직접 비교합니다</span>`,
+        `문제 ${probNum}/${maxProblems} 분석 중...<br><span class="small muted">해설·학생 풀이·문제를 직접 비교합니다</span>`,
         pct
       );
       setLabel(`문제 ${probNum} / ${maxProblems}`);
@@ -911,10 +845,10 @@ async function analyze(){
 
       const parts=[];
       parts.push({type:'text', text:
-        `분析 대상: ${probNum}번 문제\n`
+        `분석 대상: ${probNum}번 문제\n`
         +(rangeText?`범위: ${rangeText}\n`:'')
         +(thisAns+thisStu)
-        +`\n아래 이미지들을 보고 ${probNum}번 문제만 분析해 JSON을 출력하세요.`
+        +`\n아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
       });
 
       // 문제 이미지
@@ -958,22 +892,22 @@ async function analyze(){
         console.warn(`문제 ${probNum} 파싱 실패`,e,raw);
         probData={
           number:probNum, answer:correctAnswers[probNum]||'?',
-          judgement:'분析 제외',
-          solution_steps:['이미지 분析 실패'],
+          judgement:'분석 제외',
+          solution_steps:['이미지 분석 실패'],
           student_summary:{equation:'-',calculation:'-',drawing:'-',final_answer:'-'},
           feedback:{evaluation:'이미지 인식 실패. 사진을 더 선명하게 찍어 주세요.',improvement:'-'},
-          scores:{concept:0,concept_reason:'분析 실패',process:0,process_reason:'분析 실패',interpretation:0,interpretation_reason:'분析 실패'}
+          scores:{concept:0,concept_reason:'분석 실패',process:0,process_reason:'분석 실패',interpretation:0,interpretation_reason:'분석 실패'}
         };
       }
       problemResults.push(probData);
-      if(i<maxProblems-1) await sleep(2000);
+      if(i<maxProblems-1) await sleep(4000);
     }
 
     // ── Step 3: 총평 ──
     setMsg('총평 생성 중...<br><span class="small muted">전체 결과를 종합합니다</span>', 90);
     setLabel('총평 작성 중');
     const summaryParts=[{type:'text',text:
-      `${maxProblems}문제 분析 결과:\n${JSON.stringify(problemResults)}\n\n`
+      `${maxProblems}문제 분석 결과:\n${JSON.stringify(problemResults)}\n\n`
       +`전체 총평을 JSON으로 출력: {"total":{"strengths":"...","weaknesses":"...","study_direction":"..."}}`
     }];
     let totalData={strengths:'',weaknesses:'',study_direction:''};
@@ -985,7 +919,7 @@ async function analyze(){
 
     const finalData={problems:problemResults,total:totalData};
     setMsg('완료!', 100);
-    setLabel(`${maxProblems}문제 분析 완료`);
+    setLabel(`${maxProblems}문제 분석 완료`);
     await sleep(300);
     finishRender(finalData,rc);
 
@@ -1017,26 +951,31 @@ function finishRender(data, rc){
 
 
 async function downloadPDF(){
-  const container=document.getElementById('resultContent');
-  if(!container || !container.innerHTML.trim()) return;
-  const cards=[...container.querySelectorAll('.warn-card, .result-card')];
-  if(!cards.length) return;
-
+  const target=document.getElementById('resultContent');
+  if(!target || !target.innerHTML.trim()) return;
+  const canvas=await html2canvas(target,{scale:2,backgroundColor:'#f4f3ef'});
+  const img=canvas.toDataURL('image/jpeg',0.95);
   const { jsPDF }=window.jspdf;
   const pdf=new jsPDF('p','mm','a4');
-  const pageW=210, pageH=297, margin=10, gap=8;
-  const slotW=pageW-(margin*2);
-  const slotH=(pageH-(margin*2)-gap)/2;
-
-  for(let i=0;i<cards.length;i++){
-    const canvas=await html2canvas(cards[i],{scale:2,backgroundColor:'#f4f3ef'});
-    const img=canvas.toDataURL('image/jpeg',0.95);
-    const ratio=Math.min(slotW/canvas.width, slotH/canvas.height);
-    const drawW=canvas.width*ratio, drawH=canvas.height*ratio;
-    const x=margin+(slotW-drawW)/2;
-    const y=(i%2===0)?margin:margin+slotH+gap+(slotH-drawH)/2;
-    pdf.addImage(img,'JPEG',x,y,drawW,drawH);
-    if(i<cards.length-1 && i%2===1) pdf.addPage();
+  const pw=210, ph=297;
+  const iw=pw-20, ih=canvas.height*iw/canvas.width;
+  let y=10, remaining=ih, pageHeight=ph-20;
+  if(ih<=pageHeight){ pdf.addImage(img,'JPEG',10,y,iw,ih); }
+  else {
+    let position=0;
+    const pageCanvas=document.createElement('canvas');
+    const pageCtx=pageCanvas.getContext('2d');
+    const slicePx=Math.floor(canvas.width * (pageHeight/iw));
+    while(position<canvas.height){
+      pageCanvas.width=canvas.width; pageCanvas.height=Math.min(slicePx, canvas.height-position);
+      pageCtx.clearRect(0,0,pageCanvas.width,pageCanvas.height);
+      pageCtx.drawImage(canvas,0,position,canvas.width,pageCanvas.height,0,0,canvas.width,pageCanvas.height);
+      const pageImg=pageCanvas.toDataURL('image/jpeg',0.95);
+      const drawnH=pageCanvas.height*iw/pageCanvas.width;
+      pdf.addImage(pageImg,'JPEG',10,10,iw,drawnH);
+      position += pageCanvas.height;
+      if(position<canvas.height) pdf.addPage();
+    }
   }
   pdf.save('physics-analysis.pdf');
 }
