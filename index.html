@@ -574,9 +574,11 @@ async function cropImageToGrid(file, coords) {
       const xCuts = [...cols.map(c => Math.round(c * W)), W];
       const yCuts = [...rows.map(r => Math.round(r * H)), H];
 
+      // 열 우선 순서: 좌상(1번)→좌하(2번)→우상(3번)→우하(4번)
+      // 실제 이미지 배치: 왼쪽 열에 1·2번, 오른쪽 열에 3·4번
       const cropped = [];
-      for (let ri = 0; ri < yCuts.length - 1; ri++) {
-        for (let ci = 0; ci < xCuts.length - 1; ci++) {
+      for (let ci = 0; ci < xCuts.length - 1; ci++) {
+        for (let ri = 0; ri < yCuts.length - 1; ri++) {
           const x = xCuts[ci], y = yCuts[ri];
           const w = xCuts[ci+1] - x, h = yCuts[ri+1] - y;
           const canvas = document.createElement('canvas');
@@ -588,7 +590,7 @@ async function cropImageToGrid(file, coords) {
             ...file,
             base64,
             mediaType: 'image/jpeg',
-            name: file.name.replace(/\.[^.]+$/, '') + `_crop${ri*( xCuts.length-1)+ci+1}.jpg`
+            name: file.name.replace(/\.[^.]+$/, '') + `_crop${ci*(yCuts.length-1)+ri+1}.jpg`
           });
         }
       }
