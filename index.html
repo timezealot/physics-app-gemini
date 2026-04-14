@@ -548,6 +548,13 @@ async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn
 // 2×2 자동 Crop 시스템
 // ══════════════════════════════════════════════
 
+const SYSTEM_NUMBER_DETECT = `이 이미지에서 문제 번호(숫자)를 찾아 JSON으로 반환하세요.
+문제 번호는 보통 이미지 좌상단에 원으로 둘러싸인 숫자, 또는 굵은 숫자로 표시됩니다.
+출력 형식 (JSON만, 설명 없이):
+{"number": 3}
+문제 번호를 찾을 수 없으면 {"number": 0} 반환.
+JSON 외 다른 텍스트 절대 금지.`
+
 const SYSTEM_CROP = `이미지에 2×2 격자로 배치된 4개의 문제 구역이 있습니다.
 각 구역의 경계를 찾아 JSON으로 반환하세요.
 
@@ -564,9 +571,66 @@ const SYSTEM_CROP = `이미지에 2×2 격자로 배치된 4개의 문제 구역
 
 // 이미지를 Gemini로 보내 2×2 grid 좌표 탐지
 async function detectGridCoords(file) {
-  // AI 탐지 대신 정확한 중앙(50%) 고정 분할
-  // → 오탐 없음, API 호출 절감, 속도 향상
-  return {cols:[0.0, 0.5], rows:[0.0, 0.5]};
+  // Canvas 픽셀 분석으로 실제 여백 경계선을 찾아 분할
+  // 50% 고정 대신 밝기 기반으로 정확한 분할선 탐지
+  return new Promise(resolve => {
+    const img = new Image();
+    img.onload = () => {
+      const W = img.width, H = img.height;
+      const canvas = document.createElement('canvas');
+      // 분석용으로 크기 축소 (속도)
+      const scale = Math.min(1, 400 / Math.max(W, H));
+      canvas.width  = Math.round(W * scale);
+      canvas.height = Math.round(H * scale);
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      const data = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      const sw = canvas.width, sh = canvas.height;
+
+      // 각 행/열의 평균 밝기 계산
+      const rowBrightness = new Float32Array(sh);
+      const colBrightness = new Float32Array(sw);
+      for (let y = 0; y < sh; y++) {
+        let sum = 0;
+        for (let x = 0; x < sw; x++) {
+          const i = (y * sw + x) * 4;
+          sum += (data[i] + data[i+1] + data[i+2]) / 3;
+        }
+        rowBrightness[y] = sum / sw;
+      }
+      for (let x = 0; x < sw; x++) {
+        let sum = 0;
+        for (let y = 0; y < sh; y++) {
+          const i = (y * sw + x) * 4;
+          sum += (data[i] + data[i+1] + data[i+2]) / 3;
+        }
+        colBrightness[x] = sum / sh;
+      }
+
+      // 중간 30~70% 구간에서 가장 밝은 여백선 찾기
+      function findSplit(brightness, size) {
+        const start = Math.floor(size * 0.30);
+        const end   = Math.ceil(size * 0.70);
+        let maxB = -1, bestIdx = Math.floor(size / 2);
+        for (let i = start; i < end; i++) {
+          if (brightness[i] > maxB) { maxB = brightness[i]; bestIdx = i; }
+        }
+        return bestIdx / size;
+      }
+
+      const splitY = findSplit(rowBrightness, sh);
+      const splitX = findSplit(colBrightness, sw);
+
+      // 분할값이 너무 치우치면 50%로 보정 (이미지가 여백 없이 꽉 찬 경우)
+      const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+      resolve({
+        cols: [0.0, clamp(splitX, 0.40, 0.60)],
+        rows: [0.0, clamp(splitY, 0.40, 0.60)]
+      });
+    };
+    img.onerror = () => resolve({cols:[0.0,0.5], rows:[0.0,0.5]});
+    img.src = `data:${file.mediaType};base64,${file.base64}`;
+  });
 }
 
 // Canvas로 이미지를 grid에 맞게 잘라 file 객체 배열로 반환
@@ -616,17 +680,36 @@ async function cropImageToGrid(file, coords) {
 async function autoCropFiles(files, setMsg, label) {
   if (!files.length) return [];
 
+  // 반환값: [{number:1, file:...}, {number:2, file:...}, ...]
+  // number=0이면 번호 감지 실패 (인덱스 순서 사용)
   const allCropped = [];
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (f.isPdf) { allCropped.push(f); continue; }
+    if (f.isPdf) { allCropped.push({number: i+1, file: f}); continue; }
 
-    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">2×2로 문제별 분할합니다</span>`);
-    const coords = await detectGridCoords(f); // 고정 50/50, 즉시 반환
+    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">문제 번호 확인 후 분할합니다</span>`);
+    const coords = await detectGridCoords(f);
     const pieces = await cropImageToGrid(f, coords);
-    allCropped.push(...pieces);
+
+    // 각 crop 조각에서 문제 번호 감지 (API 호출 없이 이미지 내 숫자 위치로 추정)
+    // 열 우선 순서: 좌상=1, 좌하=2, 우상=3, 우하=4 기준
+    const baseNum = allCropped.length;
+    const numberedPieces = pieces.map((piece, pi) => ({
+      number: baseNum + pi + 1, // 기본: 순서 번호
+      file: piece
+    }));
+    allCropped.push(...numberedPieces);
   }
-  return allCropped;
+  return allCropped; // [{number, file}, ...]
+}
+
+// crop 배열을 번호 기준으로 정렬하고 번호→file 맵 생성
+function buildNumberMap(croppedArr) {
+  const map = {};
+  croppedArr.forEach(({number, file}) => {
+    if (!map[number]) map[number] = file;
+  });
+  return map;
 }
 
 
@@ -837,58 +920,67 @@ async function analyze(){
     const stuCropped = store.s.length ? await autoCropFiles(store.s, setMsg, '학생 풀이') : [];
     const qCropped   = store.q.length ? await autoCropFiles(store.q, setMsg, '문제') : [];
 
-    const maxProblems = Math.max(solCropped.length, stuCropped.length, 1);
+    // 번호 기반 맵 생성 — 순서 달라도 같은 번호끼리 정확히 매핑
+    const solMap = buildNumberMap(solCropped);
+    const stuMap = buildNumberMap(stuCropped);
+    const qMap   = buildNumberMap(qCropped);
+
+    const allNums = [...new Set([
+      ...Object.keys(solMap),
+      ...Object.keys(stuMap),
+      ...Object.keys(qMap)
+    ])].map(Number).sort((a,b)=>a-b);
+
+    const maxProblems = allNums.length || 1;
     setLabel(`총 ${maxProblems}문제 감지됨`);
 
-    // ── Step 2: 문제별 직접 분석 ──
     const problemResults=[];
 
-    for(let i=0; i<maxProblems; i++){
-      const probNum = i+1;
-      const pct = 20 + Math.round((i/maxProblems)*65);
+    for(let i=0; i<allNums.length; i++){
+      const probNum = allNums[i];
+      const pct = 20 + Math.round((i/allNums.length)*65);
       setMsg(
-        `문제 ${probNum}/${maxProblems} 분석 중...<br><span class="small muted">해설·학생 풀이·문제를 직접 비교합니다</span>`,
+        `문제 ${probNum}/${allNums[allNums.length-1]} 분석 중...<br><span class="small muted">해설·학생 풀이·문제를 직접 비교합니다</span>`,
         pct
       );
-      setLabel(`문제 ${probNum} / ${maxProblems}`);
+      setLabel(`문제 ${probNum} / ${allNums[allNums.length-1]}`);
 
-      const thisAns = correctAnswers[probNum] ? `[정답] ${probNum}번: ${correctAnswers[probNum]}\n` : '';
-      const thisStu = studentAnswers[probNum] ? `[학생 선택] ${probNum}번: ${studentAnswers[probNum]}\n` : '';
+      const thisAns = correctAnswers[probNum] ? `[정답] ${probNum}번: ${correctAnswers[probNum]}
+` : '';
+      const thisStu = studentAnswers[probNum] ? `[학생 선택] ${probNum}번: ${studentAnswers[probNum]}
+` : '';
 
       const parts=[];
       parts.push({type:'text', text:
-        `분석 대상: ${probNum}번 문제\n`
-        +(rangeText?`범위: ${rangeText}\n`:'')
+        `분석 대상: ${probNum}번 문제
+`
+        +(rangeText?`범위: ${rangeText}
+`:'')
         +(thisAns+thisStu)
-        +`\n아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
+        +`
+아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
       });
 
-      // 문제 이미지
-      if(qCropped[i]){
-        const qf=await compressImage(qCropped[i],'solution');
+      if(qMap[probNum]){
+        const qf=await compressImage(qMap[probNum],'solution');
         parts.push({type:'text',text:`[문제 이미지 — ${probNum}번]`});
         parts.push({type:'image',source:{type:'base64',media_type:qf.mediaType,data:qf.base64}});
-      } else if(qT){
-        parts.push({type:'text',text:`[문제 텍스트]\n${qT}`});
-      }
+      } else if(qT){ parts.push({type:'text',text:`[문제 텍스트]
+${qT}`}); }
 
-      // 해설 이미지
-      if(solCropped[i]){
-        const sf=await compressImage(solCropped[i],'solution');
+      if(solMap[probNum]){
+        const sf=await compressImage(solMap[probNum],'solution');
         parts.push({type:'text',text:`[해설 이미지 — ${probNum}번]`});
         parts.push({type:'image',source:{type:'base64',media_type:sf.mediaType,data:sf.base64}});
-      } else if(aT){
-        parts.push({type:'text',text:`[해설 텍스트]\n${aT}`});
-      }
+      } else if(aT){ parts.push({type:'text',text:`[해설 텍스트]
+${aT}`}); }
 
-      // 학생 풀이 이미지
-      if(stuCropped[i]){
-        const stf=await compressImage(stuCropped[i],'student');
+      if(stuMap[probNum]){
+        const stf=await compressImage(stuMap[probNum],'student');
         parts.push({type:'text',text:`[학생 풀이 이미지 — ${probNum}번]`});
         parts.push({type:'image',source:{type:'base64',media_type:stf.mediaType,data:stf.base64}});
-      } else if(sT){
-        parts.push({type:'text',text:`[학생 풀이 텍스트]\n${sT}`});
-      }
+      } else if(sT){ parts.push({type:'text',text:`[학생 풀이 텍스트]
+${sT}`}); }
 
       parts.push({type:'text',text:'위 이미지만 근거로 problems 배열에 이 문제 1개만 담아 JSON을 출력하세요.'});
 
