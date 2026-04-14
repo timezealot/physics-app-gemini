@@ -507,7 +507,6 @@ function parseProblemsFromOCR(text){
 
 async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn=null}){
   const apiKey=document.getElementById('apiKey').value.trim();
-  // 2번째 재시도(attempt===1)부터 fallback 모델로 전환
   const activeModel = attempt>=1 ? MODEL.fallback : model;
   const res=await fetch('/api/proxy',{
     method:'POST',
@@ -519,14 +518,25 @@ async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn
     let msg='API 오류', retryAfter=65;
     try{const j=JSON.parse(raw); msg=j.error?.message||msg; retryAfter=j.retryAfter||65;}catch{msg=raw.slice(0,300);}
     msg=msg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
-    // 429(quota) 또는 503(혼잡) 시 자동 재시도
-    if((res.status===429||res.status===503) && attempt<2){
-      const waitMsg=`⏳ 서버 혼잡 — ${retryAfter}초 후 자동 재시도... (${attempt+1}/2)${attempt>=1?' [대체 모델 사용 중]':''}`;
+
+    const isOverload = res.status===503 || msg.toLowerCase().includes('high demand') || msg.toLowerCase().includes('overloaded');
+    const isQuota   = res.status===429;
+
+    if((isOverload || isQuota) && attempt<4){
+      // 503 과부하: 짧게 기다렸다 재시도 (retryAfter 무시하고 고정 15초)
+      // 429 quota: proxy가 파싱한 retryAfter 사용
+      const wait = isOverload ? 15 : Math.min(retryAfter, 70);
+      const modelLabel = attempt>=1 ? ' [대체 모델]' : '';
+      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 초과'} — ${wait}초 후 재시도... (${attempt+1}/4)${modelLabel}`;
       if(setMsgFn) setMsgFn(waitMsg);
       else{const el=document.getElementById('loadingText'); if(el) el.innerHTML=waitMsg;}
-      await sleep(retryAfter*1000);
+      await sleep(wait*1000);
       return callProxy({parts, system, model, attempt:attempt+1, setMsgFn});
     }
+
+    // 최종 실패 시 한국어 안내
+    if(isOverload) throw new Error('Gemini 서버가 현재 매우 혼잡합니다. 잠시 후 다시 시도해 주세요.');
+    if(isQuota)    throw new Error('API 할당량이 초과됐습니다. 잠시 후 다시 시도해 주세요.');
     throw new Error(msg);
   }
   try{const j=JSON.parse(raw); return j.content?.map(c=>c.text||'').join('').trim()||'';}catch{return raw.trim();}
