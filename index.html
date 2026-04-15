@@ -198,8 +198,15 @@ const SYSTEM_DIRECT = `당신은 고등학교 물리 교사입니다.
 "일치" → evaluation: "해설과 동일한 접근으로 정확하게 풀었습니다." / improvement: "없음."
 "풀이가 다름" → evaluation: "N단계 학생:[학생식] vs 해설:[해설식]. 결과는 맞으나 접근이 다릅니다." / improvement: 한 문장
 "오류 있음" → evaluation: "N단계 오류 — 학생:[학생식] / 해설:[해설식]. [물리적 원인]" / improvement: 구체적 방지법
+
+【물리 개념 정확성 — 반드시 준수】
+- 돌림힘(토크) 오류 설명 시: "회전축에 직접 작용하는 힘은 모멘트 팔이 0이므로 돌림힘 = 0"으로 설명. "회전력을 만들지 않는다"는 표현 허용하되 이유는 반드시 "모멘트 팔 = 0"으로 명시.
+- 모멘트 팔은 회전축으로부터 힘의 작용선까지의 수직 거리
+- 돌림힘 = 힘 × 모멘트 팔 (힘 × 거리 × sin θ)
+
 추상 표현 금지. 반드시 실제 식 인용. LaTeX 금지. 분수=분자/분모, 곱셈=×.
 물리 변수는 이탤릭: *F*, *m*, *g*, *l*, *d*, *v*, *a* 등
+총평(strengths/weaknesses/study_direction)에 **굵게** 마크다운 사용 가능. 단 ## 헤더 금지.
 
 ━━━ 역량 점수 (0점 절대 금지) ━━━
 "일치": concept/process/interpretation 모두 8~10점
@@ -367,7 +374,14 @@ function fixLatex(s=''){
   r=r.replace(/\{/g,'(').replace(/\}/g,')');
   return r;
 }
-function renderItalic(s=''){return String(s).replace(/[*]([^*]+)[*]/g,'<em>$1</em>');}
+function renderItalic(s=''){
+  let r = String(s);
+  // **텍스트** → <strong>텍스트</strong>
+  r = r.replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>');
+  // *텍스트* → <em>텍스트</em>
+  r = r.replace(/[*]([^*]+)[*]/g, '<em>$1</em>');
+  return r;
+}
 function safeText(s){return (s||'').toString().trim();}
 function normalizeText(s=''){return s.replace(/\s+/g,' ').replace(/[,:]/g,' ').replace(/[()\[\]{}]/g,' ').replace(/→/g,'=').trim();}
 function normalizeFormula(s=''){return normalizeText(s).replace(/\s/g,'').replace(/\*|·/g,'×').replace(/[−–—]/g,'-').replace(/=/g,'=').replace(/([^0-9A-Za-z가-힣τΣμθ①②③④⑤])/g, m=>m).trim();}
@@ -853,9 +867,9 @@ function renderResults(data){
     + weighted.map(p=>`<tr><td>${p.number}번</td><td>${escapeHtml(p.judgement)}</td><td>${p.scores?.concept||0}/10</td><td>${p.scores?.process||0}/10</td><td>${p.scores?.interpretation||0}/10</td><td>${p.scores?.total||0}/30</td></tr>`).join('')
     + `<tr><td><b>평균</b></td><td>-</td><td><b>${avg(active,'concept')}</b></td><td><b>${avg(active,'process')}</b></td><td><b>${avg(active,'interpretation')}</b></td><td><b>${(active.length?(active.reduce((s,p)=>s+(p.scores?.total||0),0)/active.length):0).toFixed(1)}</b></td></tr>`
     + `</tbody></table></div>`
-    + `<div class="sec"><div class="sec-title">강점</div><div class="box">${escapeHtml(data.total?.strengths||'-')}</div></div>`
-    + `<div class="sec"><div class="sec-title">보완할 점</div><div class="box">${escapeHtml(data.total?.weaknesses||'-')}</div></div>`
-    + `<div class="sec"><div class="sec-title">학습 방향</div><div class="box">${escapeHtml(data.total?.study_direction||'-')}</div></div>`
+    + `<div class="sec"><div class="sec-title">강점</div><div class="box">${renderItalic(escapeHtml(data.total?.strengths||'-'))}</div></div>`
+    + `<div class="sec"><div class="sec-title">보완할 점</div><div class="box">${renderItalic(escapeHtml(data.total?.weaknesses||'-'))}</div></div>`
+    + `<div class="sec"><div class="sec-title">학습 방향</div><div class="box">${renderItalic(escapeHtml(data.total?.study_direction||'-'))}</div></div>`
     + `</div></div>`;
   rc.innerHTML=html;
   lastRenderedHtml=html;
