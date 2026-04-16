@@ -1010,26 +1010,45 @@ ${sT}`}); }
 
       parts.push({type:'text',text:'위 이미지만 근거로 problems 배열에 이 문제 1개만 담아 JSON을 출력하세요.'});
 
-      const raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis});
+      let raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis});
       let probData=null;
-      try{
-        const parsed=robustJsonParse(raw);
-        if(parsed.problems&&parsed.problems.length>0){
-          probData=parsed.problems[0];
-          probData.number=probNum;
+
+      for(let retry=0; retry<=1; retry++){
+        try{
+          const parsed=robustJsonParse(raw);
+          if(parsed.problems&&parsed.problems.length>0){
+            const candidate=parsed.problems[0];
+            const steps=candidate.solution_steps||[];
+            const hasEq=steps.some(s=>s.includes('='));
+            const tooFew=steps.length<2 && !!solMap[probNum];
+            if(!hasEq && tooFew && retry===0){
+              console.warn(`문제 ${probNum} 해설 품질 불량, 재시도...`);
+              setMsg(`문제 ${probNum} 재시도 중...<br><span class="small muted">해설 인식 재시도합니다</span>`,pct);
+              await sleep(6000);
+              raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis});
+              continue;
+            }
+            probData=candidate;
+            probData.number=probNum;
+          }
+        }catch(e){
+          console.warn(`문제 ${probNum} 파싱 실패`,e);
+          if(retry===0){ await sleep(5000); raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis}); continue; }
         }
-      }catch(e){
-        console.warn(`문제 ${probNum} 파싱 실패`,e,raw);
+        break;
+      }
+
+      if(!probData){
         probData={
           number:probNum, answer:correctAnswers[probNum]||'?',
-          judgement:'분석 제외',
-          solution_steps:['이미지 분석 실패'],
+          judgement:'분析 제외',
+          solution_steps:['이미지 분析 실패'],
           student_summary:{equation:'-',calculation:'-',drawing:'-',final_answer:'-'},
-          feedback:{evaluation:'이미지 인식 실패. 사진을 더 선명하게 찍어 주세요.',improvement:'-'},
-          scores:{concept:0,concept_reason:'분석 실패',process:0,process_reason:'분석 실패',interpretation:0,interpretation_reason:'분석 실패'}
+          feedback:{evaluation:'이미지 인식에 실패했습니다. 사진을 더 선명하게 찍어 주세요.',improvement:'-'},
+          scores:{concept:0,concept_reason:'분析 실패',process:0,process_reason:'분析 실패',interpretation:0,interpretation_reason:'분析 실패'}
         };
       }
-      problemResults.push(probData);
+            problemResults.push(probData);
       if(i<maxProblems-1) await sleep(4000);
     }
 
