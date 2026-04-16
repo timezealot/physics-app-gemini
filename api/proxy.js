@@ -75,8 +75,8 @@ export default async function handler(req, res) {
       contents: [{ role: 'user', parts: cleanParts }],
       systemInstruction: system ? { parts: [{ text: system }] } : undefined,
       generationConfig: stream
-        ? { maxOutputTokens: 16000, temperature: 0.2, topP: 0.95, topK: 40 }
-        : { maxOutputTokens: 16000, temperature: 0.2, topP: 0.95, topK: 40 },
+        ? { maxOutputTokens: 16000, temperature: 0, topP: 1.0, topK: 1 }
+        : { maxOutputTokens: 16000, temperature: 0, topP: 1.0, topK: 1 },
     };
 
     // ── 비스트리밍 ──
