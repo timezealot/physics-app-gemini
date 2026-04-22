@@ -192,7 +192,7 @@ const SYSTEM_DIRECT = `당신은 고등학교 물리 교사입니다.
 "풀이가 다름": 정답 맞지만 접근법 다름
 "오류 있음": 틀린 식·개념 오류
 "입력 필요": 정답·학생선택 없음
-"분析 제외": 이미지 완전 판독 불가
+"분석 제외": 이미지 완전 판독 불가
 
 ━━━ 피드백 ━━━
 "일치" → evaluation: "해설과 동일한 접근으로 정확하게 풀었습니다." / improvement: "없음."
@@ -221,7 +221,7 @@ JSON 스키마 (problems 배열에 이 문제 1개만):
   "problems":[{
     "number":1,
     "answer":"①",
-    "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분析 제외",
+    "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분석 제외",
     "solution_steps":["등호 포함 수식이나 문장만. 그림 라벨 절대 제외"],
     "student_summary":{"equation":"...","calculation":"...","drawing":"...","final_answer":"..."},
     "feedback":{"evaluation":"실제 식 인용","improvement":"구체적 방법"},
@@ -825,59 +825,6 @@ function robustJsonParse(text){
   throw new Error('분석 결과 JSON 파싱에 실패했습니다. (AI 응답 형식 오류 — 다시 시도해 주세요)');
 }
 
-function renderResults(data){
-  const rc=document.getElementById('resultContent');
-  const weighted=(data.problems||[]).map(applyWeightedScores).sort((a,b)=>a.number-b.number);
-  data.problems=weighted;
-  lastAnalysisJson=data;
-
-  const excluded=weighted.filter(p=>p.judgement==='분석 제외');
-  const active=weighted.filter(p=>p.judgement!=='분석 제외');
-  const avg=(arr,key)=>arr.length?(arr.reduce((s,p)=>s+(p.scores?.[key]||0),0)/arr.length).toFixed(1):'0.0';
-  let html='';
-  if(excluded.length){
-    html += `<div class="warn-card"><div class="warn-body"><b>제외된 문제</b><br>${excluded.map(p=>`${p.number}번`).join(', ')} 문제는 해설/학생 풀이 근거가 너무 약해 자동 제외했습니다.</div></div>`;
-  }
-  weighted.forEach(p=>{
-    html += `<div class="result-card"><div class="result-card-header">문제 ${p.number} 피드백</div><div class="result-card-body">`;
-    html += `<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">${escapeHtml(p.answer||'-')}</div></div>`;
-    html += `<div class="sec"><div class="sec-title">2. 판정</div><div class="box">${escapeHtml(p.judgement||'입력 필요')} <span class="mono small muted">| 유사도 ${Math.round((p.similarity||0)*100)}% · ${escapeHtml(p.similarity_band||'-')}</span></div></div>`;
-    html += `<div class="sec"><div class="sec-title">3. 해설 풀이 정리</div>`;
-    (p.solution_steps||[]).forEach((step,idx)=>{ html += `<div class="step"><div class="step-num">${idx+1}</div><div>${renderItalic(escapeHtml(fixLatex(step)))}</div></div>`; });
-    html += `</div>`;
-    html += `<div class="sec"><div class="sec-title">4. 학생 풀이 정리</div><div class="box">`
-      + `<div><b>학생이 세운 식:</b> ${renderItalic(escapeHtml(p.student_summary?.equation||'-'))}</div>`
-      + `<div><b>학생의 계산 과정:</b> ${escapeHtml(p.student_summary?.calculation||'-')}</div>`
-      + `<div><b>학생의 그림/도형:</b> ${escapeHtml(p.student_summary?.drawing||'-')}</div>`
-      + `<div><b>학생의 최종 답:</b> ${escapeHtml(p.student_summary?.final_answer||'-')}</div></div></div>`;
-    html += `<div class="sec"><div class="sec-title">5. 풀이 피드백</div><div class="box">`
-      + `<div><b>해설 기준 평가:</b> ${renderItalic(escapeHtml(fixLatex(p.feedback?.evaluation||'-')))}</div>`
-      + `<div style="margin-top:6px"><b>개선점:</b> ${renderItalic(escapeHtml(p.feedback?.improvement||'-'))}</div></div></div>`;
-    html += `<div class="sec"><div class="sec-title">6. 역량 점수</div><div class="score-grid">`
-      + scoreCell('개념 이해도', p.scores?.concept||0, p.scores?.concept_reason||'')
-      + scoreCell('풀이 전개력', p.scores?.process||0, p.scores?.process_reason||'')
-      + scoreCell('문제 해석력', p.scores?.interpretation||0, p.scores?.interpretation_reason||'')
-      + scoreCell('합계', p.scores?.total||0, `유사도 ${Math.round((p.similarity||0)*100)}%를 반영해 가중 조정했습니다.`)
-      + `</div></div>`;
-    html += `</div></div>`;
-  });
-
-  html += `<div class="result-card"><div class="result-card-header">총평</div><div class="result-card-body">`
-    + `<div class="table-wrap"><table class="table"><thead><tr><th>문제</th><th>판정</th><th>개념</th><th>전개</th><th>해석</th><th>합계</th></tr></thead><tbody>`
-    + weighted.map(p=>`<tr><td>${p.number}번</td><td>${escapeHtml(p.judgement)}</td><td>${p.scores?.concept||0}/10</td><td>${p.scores?.process||0}/10</td><td>${p.scores?.interpretation||0}/10</td><td>${p.scores?.total||0}/30</td></tr>`).join('')
-    + `<tr><td><b>평균</b></td><td>-</td><td><b>${avg(active,'concept')}</b></td><td><b>${avg(active,'process')}</b></td><td><b>${avg(active,'interpretation')}</b></td><td><b>${(active.length?(active.reduce((s,p)=>s+(p.scores?.total||0),0)/active.length):0).toFixed(1)}</b></td></tr>`
-    + `</tbody></table></div>`
-    + `<div class="sec"><div class="sec-title">강점</div><div class="box">${renderItalic(escapeHtml(data.total?.strengths||'-'))}</div></div>`
-    + `<div class="sec"><div class="sec-title">보완할 점</div><div class="box">${renderItalic(escapeHtml(data.total?.weaknesses||'-'))}</div></div>`
-    + `<div class="sec"><div class="sec-title">학습 방향</div><div class="box">${renderItalic(escapeHtml(data.total?.study_direction||'-'))}</div></div>`
-    + `</div></div>`;
-  rc.innerHTML=html;
-  lastRenderedHtml=html;
-}
-
-function scoreCell(label,val,reason){
-  return `<div class="score-cell"><div class="score-label">${escapeHtml(label)}</div><div class="score-val">${val}</div><div class="small muted">/ ${label==='합계'?'30':'10'}점</div><div class="score-reason">${renderItalic(escapeHtml(reason))}</div></div>`;
-}
 
 async function analyze(){
   if(isAnalyzing) return;
@@ -898,29 +845,25 @@ async function analyze(){
   document.getElementById('resultView').classList.add('visible');
   const rc=document.getElementById('resultContent');
 
-  rc.innerHTML = '<div class="loading"><div class="spinner"></div>'
-    + '<div id="loadingText">분석 준비 중...</div>'
-    + '<div id="progressBar" style="margin-top:14px;width:260px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
-    + '<div id="progressFill" style="height:100%;background:var(--accent);width:0%;transition:width 0.5s ease"></div></div>'
-    + '<div id="progressLabel" style="font-size:11px;color:var(--text3);margin-top:6px"></div></div>';
+  rc.innerHTML='<div class="loading"><div class="spinner"></div>'
+    +'<div id="loadingText">분석 준비 중...</div>'
+    +'<div id="progressBar" style="margin-top:14px;width:260px;height:6px;background:var(--border);border-radius:3px;overflow:hidden">'
+    +'<div id="progressFill" style="height:100%;background:var(--accent);width:0%;transition:width 0.5s ease"></div></div>'
+    +'<div id="progressLabel" style="font-size:11px;color:var(--text3);margin-top:6px"></div></div>';
 
-  const setMsg = (t, pct) => {
+  const setMsg=(t,pct)=>{
     const el=document.getElementById('loadingText'); if(el) el.innerHTML=t;
-    if(pct !== undefined){
-      const fill=document.getElementById('progressFill'); if(fill) fill.style.width=Math.min(pct,97)+'%';
-    }
+    if(pct!==undefined){const fill=document.getElementById('progressFill'); if(fill) fill.style.width=Math.min(pct,97)+'%';}
   };
-  const setLabel = (t) => { const el=document.getElementById('progressLabel'); if(el) el.textContent=t; };
+  const setLabel=(t)=>{const el=document.getElementById('progressLabel'); if(el) el.textContent=t;};
 
   try{
     if(isMock){ await sleep(500); renderResults(JSON.parse(JSON.stringify(MOCK_JSON))); return; }
 
-    // ── 정답/학생선택 맵 ──
     const ansEntries=Object.entries(correctAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
     const stuEntries=Object.entries(studentAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
 
-    // ── 텍스트만 입력 ──
-    const hasImages = store.a.length || store.s.length;
+    const hasImages=store.a.length||store.s.length;
     if(!hasImages){
       setMsg('텍스트 분석 중...', 10);
       const parts=[];
@@ -933,12 +876,12 @@ async function analyze(){
       if(stuEntries.length) aTxt+=`[학생 선택]\n${stuEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
       if(aTxt) parts.push({type:'text',text:aTxt});
       parts.push({type:'text',text:'위 자료만 사용해 JSON만 출력하세요.'});
-      const raw=await callProxy({parts,system:SYSTEM_ANALYSIS,model:MODEL.analysis});
-      const data=await safeParseWithRetry(raw,parts);
+      const raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis});
+      const data=robustJsonParse(raw);
       finishRender(data,rc); return;
     }
 
-    // ── Step 1: 이미지 2×2 자동 Crop ──
+    // ── Step 1: 이미지 crop ──
     setMsg('이미지 구역 분석 중...<br><span class="small muted">2×2 격자를 찾아 문제별로 분할합니다</span>', 5);
     setLabel('준비 중');
 
@@ -946,7 +889,6 @@ async function analyze(){
     const stuCropped = store.s.length ? await autoCropFiles(store.s, setMsg, '학생 풀이') : [];
     const qCropped   = store.q.length ? await autoCropFiles(store.q, setMsg, '문제') : [];
 
-    // 번호 기반 맵 생성 — 순서 달라도 같은 번호끼리 정확히 매핑
     const solMap = buildNumberMap(solCropped);
     const stuMap = buildNumberMap(stuCropped);
     const qMap   = buildNumberMap(qCropped);
@@ -960,6 +902,7 @@ async function analyze(){
     const maxProblems = allNums.length || 1;
     setLabel(`총 ${maxProblems}문제 감지됨`);
 
+    // ── Step 2: 문제별 분석 ──
     const problemResults=[];
 
     for(let i=0; i<allNums.length; i++){
@@ -971,42 +914,34 @@ async function analyze(){
       );
       setLabel(`문제 ${probNum} / ${allNums[allNums.length-1]}`);
 
-      const thisAns = correctAnswers[probNum] ? `[정답] ${probNum}번: ${correctAnswers[probNum]}
-` : '';
-      const thisStu = studentAnswers[probNum] ? `[학생 선택] ${probNum}번: ${studentAnswers[probNum]}
-` : '';
+      const thisAns = correctAnswers[probNum] ? `[정답] ${probNum}번: ${correctAnswers[probNum]}\n` : '';
+      const thisStu = studentAnswers[probNum] ? `[학생 선택] ${probNum}번: ${studentAnswers[probNum]}\n` : '';
 
       const parts=[];
       parts.push({type:'text', text:
-        `분석 대상: ${probNum}번 문제
-`
-        +(rangeText?`범위: ${rangeText}
-`:'')
+        `분석 대상: ${probNum}번 문제\n`
+        +(rangeText?`범위: ${rangeText}\n`:'')
         +(thisAns+thisStu)
-        +`
-아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
+        +`\n아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
       });
 
       if(qMap[probNum]){
         const qf=await compressImage(qMap[probNum],'solution');
         parts.push({type:'text',text:`[문제 이미지 — ${probNum}번]`});
         parts.push({type:'image',source:{type:'base64',media_type:qf.mediaType,data:qf.base64}});
-      } else if(qT){ parts.push({type:'text',text:`[문제 텍스트]
-${qT}`}); }
+      } else if(qT){ parts.push({type:'text',text:`[문제 텍스트]\n${qT}`}); }
 
       if(solMap[probNum]){
         const sf=await compressImage(solMap[probNum],'solution');
         parts.push({type:'text',text:`[해설 이미지 — ${probNum}번]`});
         parts.push({type:'image',source:{type:'base64',media_type:sf.mediaType,data:sf.base64}});
-      } else if(aT){ parts.push({type:'text',text:`[해설 텍스트]
-${aT}`}); }
+      } else if(aT){ parts.push({type:'text',text:`[해설 텍스트]\n${aT}`}); }
 
       if(stuMap[probNum]){
         const stf=await compressImage(stuMap[probNum],'student');
         parts.push({type:'text',text:`[학생 풀이 이미지 — ${probNum}번]`});
         parts.push({type:'image',source:{type:'base64',media_type:stf.mediaType,data:stf.base64}});
-      } else if(sT){ parts.push({type:'text',text:`[학생 풀이 텍스트]
-${sT}`}); }
+      } else if(sT){ parts.push({type:'text',text:`[학생 풀이 텍스트]\n${sT}`}); }
 
       parts.push({type:'text',text:'위 이미지만 근거로 problems 배열에 이 문제 1개만 담아 JSON을 출력하세요.'});
 
@@ -1041,27 +976,56 @@ ${sT}`}); }
       if(!probData){
         probData={
           number:probNum, answer:correctAnswers[probNum]||'?',
-          judgement:'분析 제외',
-          solution_steps:['이미지 분析 실패'],
+          judgement:'분석 제외',
+          solution_steps:['이미지 분석 실패'],
           student_summary:{equation:'-',calculation:'-',drawing:'-',final_answer:'-'},
           feedback:{evaluation:'이미지 인식에 실패했습니다. 사진을 더 선명하게 찍어 주세요.',improvement:'-'},
-          scores:{concept:0,concept_reason:'분析 실패',process:0,process_reason:'분析 실패',interpretation:0,interpretation_reason:'분析 실패'}
+          scores:{concept:0,concept_reason:'분석 실패',process:0,process_reason:'분석 실패',interpretation:0,interpretation_reason:'분석 실패'}
         };
       }
-            problemResults.push(probData);
-      if(i<maxProblems-1) await sleep(4000);
+      problemResults.push(probData);
+      if(i<allNums.length-1) await sleep(4000);
     }
 
-    // ── Step 3: 총평 ──
-    setMsg('총평 생성 중...<br><span class="small muted">전체 결과를 종합합니다</span>', 90);
+    // ── Step 3: 구조화된 총평 ──
+    setMsg('총평 생성 중...<br><span class="small muted">패턴 분석 및 맞춤 학습 방향을 작성합니다</span>', 90);
     setLabel('총평 작성 중');
+
     const summaryParts=[{type:'text',text:
-      `${maxProblems}문제 분석 결과:\n${JSON.stringify(problemResults)}\n\n`
-      +`전체 총평을 JSON으로 출력: {"total":{"strengths":"...","weaknesses":"...","study_direction":"..."}}`
+      `아래는 ${maxProblems}개 문제에 대한 학생 분석 결과입니다.
+${JSON.stringify(problemResults)}
+
+위 결과를 분석하여 아래 JSON 형식으로 학생 맞춤 총평을 출력하세요.
+첫 글자는 반드시 {. 마크다운 펜스 금지.
+
+{
+  "total": {
+    "strengths": "잘한 점 2~3가지. 구체적 문제번호와 실제 식 인용.",
+    "weaknesses": "부족한 점 2~3가지. 구체적 문제번호와 실제 식 인용.",
+    "study_direction": "우선 학습 방향 2~3가지.",
+    "error_patterns": [
+      {"type": "오류 유형명 (부호 오류/조건 누락/개념 오류/계산 실수/식 설정 오류 중 택1)", "count": 발생횟수, "problems": [문제번호], "detail": "구체적 설명 한 문장"}
+    ],
+    "weak_concepts": ["취약 물리 개념1", "취약 물리 개념2"],
+    "level": "상|중상|중|중하|하",
+    "level_reason": "수준 판단 근거 한 문장",
+    "next_steps": [
+      {"priority": 1, "action": "구체적 학습 행동. 추상 표현 금지."},
+      {"priority": 2, "action": "..."},
+      {"priority": 3, "action": "..."}
+    ]
+  }
+}
+
+규칙:
+- error_patterns: 같은 유형 오류 반복 시만 포함. 없으면 []
+- weak_concepts: 오류 문제 공통 취약 개념. 없으면 []
+- level 기준: 평균 25점 이상=상, 20~24=중상, 15~19=중, 10~14=중하, 10 미만=하
+- 분석 제외 문제는 점수 계산 제외`
     }];
-    let totalData={strengths:'',weaknesses:'',study_direction:''};
+    let totalData={strengths:'',weaknesses:'',study_direction:'',error_patterns:[],weak_concepts:[],level:'중',level_reason:'',next_steps:[]};
     try{
-      const tRaw=await callProxy({parts:summaryParts,system:'JSON만 출력. 첫 글자는 {.',model:MODEL.analysis});
+      const tRaw=await callProxy({parts:summaryParts,system:'JSON만 출력. 첫 글자는 {. 마크다운 펜스 금지.',model:MODEL.analysis});
       const tp=robustJsonParse(tRaw);
       totalData=tp.total||tp;
     }catch(e){console.warn('총평 실패',e);}
@@ -1083,50 +1047,183 @@ ${sT}`}); }
 }
 
 
-async function safeParseWithRetry(raw, parts){
-  try{ return robustJsonParse(raw); }catch(e){
-    console.warn('JSON 파싱 실패, 재시도...');
-    await sleep(5000);
-    const retryParts=[{type:'text', text:'아래 텍스트에서 JSON 객체만 추출해 { 로 시작하는 JSON만 출력하세요.\n\n'+raw.slice(0,8000)}];
-    const retryRaw=await callProxy({parts:retryParts, system:'JSON 객체만 출력. 첫 글자는 반드시 {. 마크다운 금지.', model:MODEL.analysis});
-    return robustJsonParse(retryRaw);
+function renderResults(data){
+  const rc=document.getElementById('resultContent');
+  const weighted=(data.problems||[]).map(p=>{applyWeightedScores(p); return p;});
+  const active=weighted.filter(p=>p.judgement!=='분석 제외'&&p.judgement!=='분석 제외');
+  const avg=(arr,key)=>arr.length?(arr.reduce((s,p)=>s+(p.scores?.[key]||0),0)/arr.length).toFixed(1):'-';
+
+  // ── 제외 문제 배너 ──
+  const excluded=weighted.filter(p=>p.judgement==='분석 제외'||p.judgement==='분석 제외');
+  let html='';
+  if(excluded.length){
+    html+=`<div class="warn-card"><div class="warn-body">⚠ <b>제외된 문제</b><br>${excluded.map(p=>`${p.number}번 문제는 해설/학생 풀이 근거가 너무 약해 자동 제외했습니다.`).join('<br>')}</div></div>`;
   }
+
+  // ── 문제별 피드백 ──
+  weighted.forEach(p=>{
+    const jColor={'일치':'var(--green)','풀이가 다름':'var(--yellow)','오류 있음':'var(--red)','입력 필요':'var(--text2)'}[p.judgement]||'var(--text2)';
+    const simPct=Math.round((p._sim||0)*100);
+    html+=`<div class="result-card"><div class="result-card-header">문제 ${p.number} 피드백</div><div class="result-card-body">`;
+    html+=`<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">⑤</div></div>`;
+    if(p.answer) html=html.replace('⑤', escapeHtml(p.answer));
+    html+=`<div class="sec"><div class="sec-title">2. 판정</div><div class="box" style="color:${jColor};font-weight:600">${escapeHtml(p.judgement)} &nbsp;|&nbsp; 유사도 ${simPct}% &nbsp;·&nbsp; ${simPct>=70?'양호':simPct>=50?'보통':'매우 낮음'}</div></div>`;
+    // 해설 풀이
+    const steps=p.solution_steps||[];
+    if(steps.length){
+      html+=`<div class="sec"><div class="sec-title">3. 해설 풀이 정리</div>`;
+      steps.forEach((step,idx)=>{
+        html+=`<div class="step"><div class="step-num">${idx+1}</div><div>${renderItalic(escapeHtml(fixLatex(step)))}</div></div>`;
+      });
+      html+=`</div>`;
+    }
+    // 학생 풀이
+    const ss=p.student_summary||{};
+    html+=`<div class="sec"><div class="sec-title">4. 학생 풀이 정리</div><div class="box">`;
+    html+=`<div><b>학생이 세운 식:</b> ${renderItalic(escapeHtml(ss.equation||'-'))}</div>`;
+    html+=`<div><b>학생의 계산 과정:</b> ${escapeHtml(ss.calculation||'-')}</div>`;
+    html+=`<div><b>학생의 그림/도형:</b> ${escapeHtml(ss.drawing||'-')}</div>`;
+    html+=`<div><b>학생의 최종 답:</b> <b>${escapeHtml(ss.final_answer||'-')}</b></div>`;
+    html+=`</div></div>`;
+    // 피드백
+    if(p.feedback){
+      html+=`<div class="sec"><div class="sec-title">5. 풀이 피드백</div><div class="box">`;
+      html+=`<div><b>해설 기준 평가:</b> ${renderItalic(escapeHtml(fixLatex(p.feedback?.evaluation||'-')))}</div>`;
+      html+=`<div style="margin-top:6px"><b>개선점:</b> ${renderItalic(escapeHtml(p.feedback?.improvement||'-'))}</div>`;
+      html+=`</div></div>`;
+    }
+    // 역량 점수
+    html+=`<div class="sec"><div class="sec-title">6. 역량 점수</div><div class="score-grid">`;
+    html+=scoreCell('개념 이해도', p.scores?.concept||0, p.scores?.concept_reason||'');
+    html+=scoreCell('풀이 전개력', p.scores?.process||0, p.scores?.process_reason||'');
+    html+=scoreCell('문제 해석력', p.scores?.interpretation||0, p.scores?.interpretation_reason||'');
+    html+=scoreCell('합계', (p.scores?.concept||0)+(p.scores?.process||0)+(p.scores?.interpretation||0), `유사도 ${simPct}%를 반영해 가중 조정했습니다.`);
+    html+=`</div></div>`;
+    html+=`</div></div>`;
+  });
+
+  // ── 총평 ──
+  const tot=data.total||{};
+  const lvlColor={'상':'#16a34a','중상':'#2563eb','중':'#d97706','중하':'#dc2626','하':'#991b1b'};
+  const lvlBg={'상':'#dcfce7','중상':'#dbeafe','중':'#fef3c7','중하':'#fee2e2','하':'#fce7f3'};
+  const lv=tot.level||'중';
+  const lvBadge=`<span style="display:inline-block;padding:4px 14px;border-radius:20px;font-size:13px;font-weight:700;background:${lvlBg[lv]||'#f0efe9'};color:${lvlColor[lv]||'#374151'}">${lv}</span>`;
+
+  const patterns=Array.isArray(tot.error_patterns)?tot.error_patterns:[];
+  const patternHTML=patterns.length?`
+    <div class="sec"><div class="sec-title">반복 오류 패턴</div>
+    <div class="table-wrap"><table class="table">
+      <thead><tr><th>오류 유형</th><th>횟수</th><th>해당 문제</th><th>설명</th></tr></thead>
+      <tbody>${patterns.map(p=>`<tr>
+        <td><span style="background:#fee2e2;color:#b91c1c;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${escapeHtml(p.type||'')}</span></td>
+        <td style="text-align:center;font-weight:700">${p.count||0}회</td>
+        <td style="text-align:center">${(p.problems||[]).map(n=>n+'번').join(', ')}</td>
+        <td style="font-size:12px">${renderItalic(escapeHtml(p.detail||''))}</td>
+      </tr>`).join('')}</tbody>
+    </table></div></div>` : '';
+
+  const concepts=Array.isArray(tot.weak_concepts)?tot.weak_concepts:[];
+  const conceptHTML=concepts.length?`
+    <div class="sec"><div class="sec-title">취약 개념</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;padding:4px 0">
+      ${concepts.map(c=>`<span style="background:#dbeafe;color:#1d4ed8;padding:4px 12px;border-radius:12px;font-size:12px;font-weight:600">${escapeHtml(c)}</span>`).join('')}
+    </div></div>` : '';
+
+  const steps2=Array.isArray(tot.next_steps)?tot.next_steps:[];
+  const stepsHTML=steps2.length?`
+    <div class="sec"><div class="sec-title">우선 학습 행동</div>
+    ${steps2.sort((a,b)=>(a.priority||0)-(b.priority||0)).map(s=>`
+      <div style="display:flex;gap:10px;align-items:flex-start;background:var(--surface2);border-radius:8px;padding:10px 13px;margin-bottom:6px">
+        <div style="min-width:24px;height:24px;border-radius:50%;background:var(--accent);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center">${s.priority||''}</div>
+        <div style="font-size:13px;line-height:1.6">${renderItalic(escapeHtml(s.action||''))}</div>
+      </div>`).join('')}
+    </div>` : '';
+
+  const totalHTML=
+    `<div class="result-card"><div class="result-card-header">총평</div><div class="result-card-body">`
+    +`<div class="table-wrap"><table class="table"><thead><tr><th>문제</th><th>판정</th><th>개념</th><th>전개</th><th>해석</th><th>합계</th></tr></thead><tbody>`
+    +weighted.map(p=>`<tr><td>${p.number}번</td><td>${escapeHtml(p.judgement)}</td><td>${p.scores?.concept||0}/10</td><td>${p.scores?.process||0}/10</td><td>${p.scores?.interpretation||0}/10</td><td>${(p.scores?.concept||0)+(p.scores?.process||0)+(p.scores?.interpretation||0)}/30</td></tr>`).join('')
+    +`<tr><td><b>평균</b></td><td>-</td><td><b>${avg(active,'concept')}</b></td><td><b>${avg(active,'process')}</b></td><td><b>${avg(active,'interpretation')}</b></td><td><b>${(active.length?(active.reduce((s,p)=>s+(p.scores?.concept||0)+(p.scores?.process||0)+(p.scores?.interpretation||0),0)/active.length):0).toFixed(1)}</b></td></tr>`
+    +`</tbody></table></div>`
+    +`<div class="sec" style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><div class="sec-title" style="margin-bottom:0">학생 수준</div>${lvBadge}<span style="font-size:12px;color:var(--text2)">${renderItalic(escapeHtml(tot.level_reason||''))}</span></div>`
+    +`<div class="sec"><div class="sec-title">강점</div><div class="box">${renderItalic(escapeHtml(tot.strengths||'-'))}</div></div>`
+    +`<div class="sec"><div class="sec-title">보완할 점</div><div class="box">${renderItalic(escapeHtml(tot.weaknesses||'-'))}</div></div>`
+    +patternHTML
+    +conceptHTML
+    +stepsHTML
+    +`<div class="sec"><div class="sec-title">학습 방향</div><div class="box">${renderItalic(escapeHtml(tot.study_direction||'-'))}</div></div>`
+    +`</div></div>`;
+
+  html+=totalHTML;
+  rc.innerHTML=html;
 }
+
+function scoreCell(label, val, reason){
+  return `<div class="score-cell"><div class="score-label">${escapeHtml(label)}</div><div class="score-val">${val}</div><div class="small muted">/ ${label==='합계'?'30':'10'}점</div><div class="score-reason">${renderItalic(escapeHtml(reason))}</div></div>`;
+}
+
 
 function finishRender(data, rc){
-  const fill=document.getElementById('progressFill'); if(fill) fill.style.width='100%';
+  const fill=document.getElementById('progressFill');
+  if(fill) fill.style.width='100%';
   renderResults(data);
 }
-
 
 async function downloadPDF(){
   const target=document.getElementById('resultContent');
   if(!target || !target.innerHTML.trim()) return;
-  const canvas=await html2canvas(target,{scale:2,backgroundColor:'#f4f3ef'});
-  const img=canvas.toDataURL('image/jpeg',0.95);
-  const { jsPDF }=window.jspdf;
-  const pdf=new jsPDF('p','mm','a4');
-  const pw=210, ph=297;
-  const iw=pw-20, ih=canvas.height*iw/canvas.width;
-  let y=10, remaining=ih, pageHeight=ph-20;
-  if(ih<=pageHeight){ pdf.addImage(img,'JPEG',10,y,iw,ih); }
-  else {
-    let position=0;
-    const pageCanvas=document.createElement('canvas');
-    const pageCtx=pageCanvas.getContext('2d');
-    const slicePx=Math.floor(canvas.width * (pageHeight/iw));
-    while(position<canvas.height){
-      pageCanvas.width=canvas.width; pageCanvas.height=Math.min(slicePx, canvas.height-position);
-      pageCtx.clearRect(0,0,pageCanvas.width,pageCanvas.height);
-      pageCtx.drawImage(canvas,0,position,canvas.width,pageCanvas.height,0,0,canvas.width,pageCanvas.height);
-      const pageImg=pageCanvas.toDataURL('image/jpeg',0.95);
-      const drawnH=pageCanvas.height*iw/pageCanvas.width;
-      pdf.addImage(pageImg,'JPEG',10,10,iw,drawnH);
-      position += pageCanvas.height;
-      if(position<canvas.height) pdf.addPage();
+
+  const btn=document.querySelector('.btn.primary');
+  if(btn){ btn.disabled=true; btn.textContent='⏳ PDF 생성 중...'; }
+
+  try{
+    const canvas=await html2canvas(target,{
+      scale:1.5,
+      backgroundColor:'#f4f3ef',
+      useCORS:false,
+      logging:false,
+      removeContainer:true,
+    });
+
+    const { jsPDF }=window.jspdf;
+    const pdf=new jsPDF('p','mm','a4');
+    const pw=210, ph=297, margin=10;
+    const iw=pw-margin*2;
+    const ih=canvas.height*iw/canvas.width;
+    const pageHeight=ph-margin*2;
+
+    if(ih<=pageHeight){
+      const img=canvas.toDataURL('image/jpeg',0.88);
+      pdf.addImage(img,'JPEG',margin,margin,iw,ih);
+    } else {
+      const slicePx=Math.floor(canvas.width*pageHeight/iw);
+      let position=0;
+      while(position<canvas.height){
+        const sliceH=Math.min(slicePx,canvas.height-position);
+        const pageCanvas=document.createElement('canvas');
+        pageCanvas.width=canvas.width; pageCanvas.height=sliceH;
+        const ctx=pageCanvas.getContext('2d');
+        ctx.drawImage(canvas,0,position,canvas.width,sliceH,0,0,canvas.width,sliceH);
+        const pageImg=pageCanvas.toDataURL('image/jpeg',0.88);
+        const drawnH=sliceH*iw/canvas.width;
+        pdf.addImage(pageImg,'JPEG',margin,margin,iw,drawnH);
+        position+=sliceH;
+        if(position<canvas.height) pdf.addPage();
+        pageCanvas.width=0; pageCanvas.height=0;
+      }
     }
+
+    const now=new Date();
+    const stamp=`${now.getMonth()+1}${now.getDate()}_${now.getHours()}${String(now.getMinutes()).padStart(2,'0')}`;
+    pdf.save(`physics-analysis_${stamp}.pdf`);
+    canvas.width=0; canvas.height=0;
+
+  }catch(e){
+    alert('PDF 저장 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요. (' + e.message + ')');
+    console.error('PDF 오류:',e);
+  }finally{
+    if(btn){ btn.disabled=false; btn.textContent='⬇ PDF 저장'; }
   }
-  pdf.save('physics-analysis.pdf');
 }
 
 window.addEventListener('load', initAnswerUI);
