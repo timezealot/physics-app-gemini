@@ -140,9 +140,9 @@ let lastRenderedHtml = '';
 let lastAnalysisJson = null;
 
 const MODEL = {
-  ocr: 'gemini-2.5-flash-lite',
+  ocr: 'gemini-2.0-flash',            // 2.5-flash-lite → 2.0-flash (혼잡 시 더 안정적)
   analysis: 'gemini-2.5-flash',       // flash: 이미지 직접 분석 정확도 대폭 향상
-  fallback: 'gemini-2.5-flash'
+  fallback: 'gemini-2.0-flash'        // 2.5-flash → 2.0-flash (과부하 폴백용)
 };
 
 const MOCK_JSON = {
@@ -386,19 +386,19 @@ function renderSafe(s=''){
   if(!s) return '-';
   let r = String(s);
   const PH = (i) => `\x00${i}\x00`;
-  const store = [];
-  // 허용 태그 보호
-  const protect = (re, tag) => { r = r.replace(re, (m) => { store.push(m); return PH(store.length-1); }); };
-  protect(/<sub>[^<]*<\/sub>/gi, 'sub');
-  protect(/<sup>[^<]*<\/sup>/gi, 'sup');
-  protect(/<br\s*\/?>/gi, 'br');
+  // [버그6 수정] 전역 store 객체와 이름 충돌 방지 → _safeStore 로 변경
+  const _safeStore = [];
+  const protect = (re) => { r = r.replace(re, (m) => { _safeStore.push(m); return PH(_safeStore.length-1); }); };
+  protect(/<sub>[^<]*<\/sub>/gi);
+  protect(/<sup>[^<]*<\/sup>/gi);
+  protect(/<br\s*\/?>/gi);
   // 마크다운 → 임시 플레이스홀더
-  r = r.replace(/\*\*([^*]+)\*\*/g, (m,t) => { store.push('<strong>'+t+'</strong>'); return PH(store.length-1); });
-  r = r.replace(/\*([^*\n]+)\*/g,   (m,t) => { store.push('<em>'+t+'</em>'); return PH(store.length-1); });
+  r = r.replace(/\*\*([^*]+)\*\*/g, (m,t) => { _safeStore.push('<strong>'+t+'</strong>'); return PH(_safeStore.length-1); });
+  r = r.replace(/\*([^*\n]+)\*/g,   (m,t) => { _safeStore.push('<em>'+t+'</em>'); return PH(_safeStore.length-1); });
   // HTML escape
   r = r.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   // 플레이스홀더 복원
-  r = r.replace(/\x00(\d+)\x00/g, (m,i) => store[parseInt(i)]);
+  r = r.replace(/\x00(\d+)\x00/g, (m,i) => _safeStore[parseInt(i)]);
   return r;
 }
 function safeText(s){return (s||'').toString().trim();}
@@ -474,7 +474,7 @@ function applyWeightedScores(problem){
 
   const solutionLen=normalizeText(solutionText).length;
   const studentLen=normalizeText(studentText).length + normalizeText(p.student_summary?.drawing||'').length;
-  const hasCoreEquation = extractMathTokens(p.student_summary?.equation||'').length >= 3;
+  // [버그8 수정] hasCoreEquation 미사용 변수 제거
   // 이미지 직접 분석 모드: AI가 이미지를 보고 직접 판단하므로
   // 텍스트 유사도(sim)만으로 분석 제외하지 않음 — AI 판단을 신뢰
   // 이미지 분석 자체 실패한 경우만 제외
@@ -559,12 +559,12 @@ async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn
     const isOverload = res.status===503 || msg.toLowerCase().includes('high demand') || msg.toLowerCase().includes('overloaded');
     const isQuota   = res.status===429;
 
-    if((isOverload || isQuota) && attempt<4){
-      // 503 과부하: 짧게 기다렸다 재시도 (retryAfter 무시하고 고정 15초)
+    if((isOverload || isQuota) && attempt<8){
+      // 503 과부하: 30초 대기 후 재시도 (1~2회차: 2.5-flash, 3회차~: fallback 모델)
       // 429 quota: proxy가 파싱한 retryAfter 사용
-      const wait = isOverload ? 15 : Math.min(retryAfter, 70);
-      const modelLabel = attempt>=1 ? ' [대체 모델]' : '';
-      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 초과'} — ${wait}초 후 재시도... (${attempt+1}/4)${modelLabel}`;
+      const wait = isOverload ? 30 : Math.min(retryAfter, 70);
+      const modelLabel = attempt>=2 ? ' [대체 모델]' : '';
+      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 초과'} — ${wait}초 후 재시도... (${attempt+1}/8)${modelLabel}`;
       if(setMsgFn) setMsgFn(waitMsg);
       else{const el=document.getElementById('loadingText'); if(el) el.innerHTML=waitMsg;}
       await sleep(wait*1000);
@@ -877,7 +877,14 @@ async function analyze(){
   const setLabel=(t)=>{const el=document.getElementById('progressLabel'); if(el) el.textContent=t;};
 
   try{
-    if(isMock){ await sleep(500); renderResults(JSON.parse(JSON.stringify(MOCK_JSON))); return; }
+    if(isMock){
+      await sleep(500);
+      // [버그7 수정] early return 전 상태 정리 (finally 미실행 방지)
+      isAnalyzing=false;
+      document.getElementById('analyzeBtn').disabled=false;
+      renderResults(JSON.parse(JSON.stringify(MOCK_JSON)));
+      return;
+    }
 
     const ansEntries=Object.entries(correctAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
     const stuEntries=Object.entries(studentAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
@@ -1068,12 +1075,15 @@ ${JSON.stringify(problemResults)}
 
 function renderResults(data){
   const rc=document.getElementById('resultContent');
-  const weighted=(data.problems||[]).map(p=>{applyWeightedScores(p); return p;});
-  const active=weighted.filter(p=>p.judgement!=='분석 제외'&&p.judgement!=='분석 제외');
+  // [버그1 수정] applyWeightedScores의 반환값(깊은복사본)을 실제로 사용
+  const weighted=(data.problems||[]).map(p=>applyWeightedScores(p));
+  // [버그3 수정] 중복 조건 제거
+  const active=weighted.filter(p=>p.judgement!=='분석 제외');
   const avg=(arr,key)=>arr.length?(arr.reduce((s,p)=>s+(p.scores?.[key]||0),0)/arr.length).toFixed(1):'-';
 
   // ── 제외 문제 배너 ──
-  const excluded=weighted.filter(p=>p.judgement==='분석 제외'||p.judgement==='분석 제외');
+  // [버그4 수정] 중복 OR 조건 제거
+  const excluded=weighted.filter(p=>p.judgement==='분석 제외');
   let html='';
   if(excluded.length){
     html+=`<div class="warn-card"><div class="warn-body">⚠ <b>제외된 문제</b><br>${excluded.map(p=>`${p.number}번 문제는 해설/학생 풀이 근거가 너무 약해 자동 제외했습니다.`).join('<br>')}</div></div>`;
@@ -1082,10 +1092,12 @@ function renderResults(data){
   // ── 문제별 피드백 ──
   weighted.forEach(p=>{
     const jColor={'일치':'var(--green)','풀이가 다름':'var(--yellow)','오류 있음':'var(--red)','입력 필요':'var(--text2)'}[p.judgement]||'var(--text2)';
-    const simPct=Math.round((p._sim||0)*100);
+    // [버그2 수정] _sim → similarity (applyWeightedScores가 저장하는 키)
+    const simPct=Math.round((p.similarity||0)*100);
     html+=`<div class="result-card"><div class="result-card-header">문제 ${p.number} 피드백</div><div class="result-card-body">`;
-    html+=`<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">⑤</div></div>`;
-    if(p.answer) html=html.replace('⑤', escapeHtml(p.answer));
+    // [버그5 수정] ⑤ 플레이스홀더+replace 방식 제거 → 정답값 직접 삽입
+    const answerDisplay = p.answer ? escapeHtml(p.answer) : '?';
+    html+=`<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">${answerDisplay}</div></div>`;
     html+=`<div class="sec"><div class="sec-title">2. 판정</div><div class="box" style="color:${jColor};font-weight:600">${escapeHtml(p.judgement)} &nbsp;|&nbsp; 유사도 ${simPct}% &nbsp;·&nbsp; ${simPct>=70?'양호':simPct>=50?'보통':'매우 낮음'}</div></div>`;
     // 해설 풀이
     const steps=p.solution_steps||[];
