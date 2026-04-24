@@ -139,10 +139,15 @@ let isAnalyzing = false;
 let lastRenderedHtml = '';
 let lastAnalysisJson = null;
 
+// ✅ 무료 티어 전용 모델 설정 (2026년 4월 기준)
+// gemini-1.5-flash      : 무료, 이미지 지원, 안정 운영 중 (OCR·분석 주력)
+// gemini-1.5-flash-8b   : 무료, 경량, 이미지 지원, 폴백용
+// ※ gemini-2.0-flash / 2.0-flash-lite 는 2026-06-01 폐기 예정 → 사용 금지
+// ※ gemini-2.5-flash 이상은 2026-04-01부터 무료 티어 제외
 const MODEL = {
-  ocr: 'gemini-2.0-flash',            // 2.5-flash-lite → 2.0-flash (혼잡 시 더 안정적)
-  analysis: 'gemini-2.5-flash',       // flash: 이미지 직접 분석 정확도 대폭 향상
-  fallback: 'gemini-2.0-flash'        // 2.5-flash → 2.0-flash (과부하 폴백용)
+  ocr:      'gemini-1.5-flash',
+  analysis: 'gemini-1.5-flash',
+  fallback:  'gemini-1.5-flash-8b'
 };
 
 const MOCK_JSON = {
@@ -552,28 +557,38 @@ async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn
   });
   const raw=await res.text();
   if(!res.ok){
-    let msg='API 오류', retryAfter=65;
-    try{const j=JSON.parse(raw); msg=j.error?.message||msg; retryAfter=j.retryAfter||65;}catch{msg=raw.slice(0,300);}
+    let msg='API 오류', retryAfter=60;
+    try{
+      // [수정] Retry-After 헤더 직접 파싱 (프록시 파싱 의존 제거)
+      const headerRetry = res.headers?.get?.('retry-after') || res.headers?.get?.('Retry-After');
+      if(headerRetry) retryAfter = Math.min(parseInt(headerRetry)||60, 60);
+      const j=JSON.parse(raw);
+      msg=j.error?.message||msg;
+      // 헤더에 없으면 바디에서 파싱
+      if(!headerRetry) retryAfter=Math.min(j.retryAfter||60, 60);
+    }catch{msg=raw.slice(0,300);}
     msg=msg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
 
     const isOverload = res.status===503 || msg.toLowerCase().includes('high demand') || msg.toLowerCase().includes('overloaded');
-    const isQuota   = res.status===429;
+    const isQuota    = res.status===429 || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit');
 
-    if((isOverload || isQuota) && attempt<8){
-      // 503 과부하: 30초 대기 후 재시도 (1~2회차: 2.5-flash, 3회차~: fallback 모델)
-      // 429 quota: proxy가 파싱한 retryAfter 사용
-      const wait = isOverload ? 30 : Math.min(retryAfter, 70);
-      const modelLabel = attempt>=2 ? ' [대체 모델]' : '';
-      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 초과'} — ${wait}초 후 재시도... (${attempt+1}/8)${modelLabel}`;
+    // 무료 티어: 최대 4회 재시도, 대기 최대 60초
+    if((isOverload || isQuota) && attempt<4){
+      const wait = isOverload ? 20 : retryAfter;
+      const useFallback = attempt >= 2;
+      const modelLabel = useFallback ? ' [폴백 모델]' : '';
+      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 제한'} — ${wait}초 후 재시도... (${attempt+1}/4)${modelLabel}`;
       if(setMsgFn) setMsgFn(waitMsg);
       else{const el=document.getElementById('loadingText'); if(el) el.innerHTML=waitMsg;}
       await sleep(wait*1000);
-      return callProxy({parts, system, model, attempt:attempt+1, setMsgFn});
+      // 2회 이상 실패 시 폴백 모델로 전환
+      const nextModel = useFallback ? MODEL.fallback : model;
+      return callProxy({parts, system, model:nextModel, attempt:attempt+1, setMsgFn});
     }
 
-    // 최종 실패 시 한국어 안내
-    if(isOverload) throw new Error('Gemini 서버가 현재 매우 혼잡합니다. 잠시 후 다시 시도해 주세요.');
-    if(isQuota)    throw new Error('API 할당량이 초과됐습니다. 잠시 후 다시 시도해 주세요.');
+    // 최종 실패 시 안내 (무료 티어 안내 포함)
+    if(isQuota)    throw new Error('무료 API 할당량에 도달했습니다. 1분 후 다시 시도하거나, Google AI Studio에서 사용량을 확인해 주세요.');
+    if(isOverload) throw new Error('Gemini 서버가 현재 혼잡합니다. 잠시 후 다시 시도해 주세요.');
     throw new Error(msg);
   }
   try{const j=JSON.parse(raw); return j.content?.map(c=>c.text||'').join('').trim()||'';}catch{return raw.trim();}
