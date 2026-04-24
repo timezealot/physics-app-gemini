@@ -376,10 +376,29 @@ function fixLatex(s=''){
 }
 function renderItalic(s=''){
   let r = String(s);
-  // **텍스트** → <strong>텍스트</strong>
   r = r.replace(/[*][*]([^*]+)[*][*]/g, '<strong>$1</strong>');
-  // *텍스트* → <em>텍스트</em>
-  r = r.replace(/[*]([^*]+)[*]/g, '<em>$1</em>');
+  r = r.replace(/[*]([^*]+)[*]/g,'<em>$1</em>');
+  return r;
+}
+
+// <sub>,<sup>,*이탤릭*,**볼드**를 모두 살려서 렌더링
+function renderSafe(s=''){
+  if(!s) return '-';
+  let r = String(s);
+  const PH = (i) => `\x00${i}\x00`;
+  const store = [];
+  // 허용 태그 보호
+  const protect = (re, tag) => { r = r.replace(re, (m) => { store.push(m); return PH(store.length-1); }); };
+  protect(/<sub>[^<]*<\/sub>/gi, 'sub');
+  protect(/<sup>[^<]*<\/sup>/gi, 'sup');
+  protect(/<br\s*\/?>/gi, 'br');
+  // 마크다운 → 임시 플레이스홀더
+  r = r.replace(/\*\*([^*]+)\*\*/g, (m,t) => { store.push('<strong>'+t+'</strong>'); return PH(store.length-1); });
+  r = r.replace(/\*([^*\n]+)\*/g,   (m,t) => { store.push('<em>'+t+'</em>'); return PH(store.length-1); });
+  // HTML escape
+  r = r.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // 플레이스홀더 복원
+  r = r.replace(/\x00(\d+)\x00/g, (m,i) => store[parseInt(i)]);
   return r;
 }
 function safeText(s){return (s||'').toString().trim();}
@@ -1080,16 +1099,16 @@ function renderResults(data){
     // 학생 풀이
     const ss=p.student_summary||{};
     html+=`<div class="sec"><div class="sec-title">4. 학생 풀이 정리</div><div class="box">`;
-    html+=`<div><b>학생이 세운 식:</b> ${renderItalic(escapeHtml(ss.equation||'-'))}</div>`;
-    html+=`<div><b>학생의 계산 과정:</b> ${escapeHtml(ss.calculation||'-')}</div>`;
-    html+=`<div><b>학생의 그림/도형:</b> ${escapeHtml(ss.drawing||'-')}</div>`;
-    html+=`<div><b>학생의 최종 답:</b> <b>${escapeHtml(ss.final_answer||'-')}</b></div>`;
+    html+=`<div><b>학생이 세운 식:</b> ${renderSafe(ss.equation||'-')}</div>`;
+    html+=`<div><b>학생의 계산 과정:</b> ${renderSafe(ss.calculation||'-')}</div>`;
+    html+=`<div><b>학생의 그림/도형:</b> ${renderSafe(ss.drawing||'-')}</div>`;
+    html+=`<div><b>학생의 최종 답:</b> <b>${renderSafe(ss.final_answer||'-')}</b></div>`;
     html+=`</div></div>`;
     // 피드백
     if(p.feedback){
       html+=`<div class="sec"><div class="sec-title">5. 풀이 피드백</div><div class="box">`;
-      html+=`<div><b>해설 기준 평가:</b> ${renderItalic(escapeHtml(fixLatex(p.feedback?.evaluation||'-')))}</div>`;
-      html+=`<div style="margin-top:6px"><b>개선점:</b> ${renderItalic(escapeHtml(p.feedback?.improvement||'-'))}</div>`;
+      html+=`<div><b>해설 기준 평가:</b> ${renderSafe(p.feedback?.evaluation||'-')}</div>`;
+      html+=`<div style="margin-top:6px"><b>개선점:</b> ${renderSafe(p.feedback?.improvement||'-')}</div>`;
       html+=`</div></div>`;
     }
     // 역량 점수
