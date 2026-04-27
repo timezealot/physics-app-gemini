@@ -139,15 +139,10 @@ let isAnalyzing = false;
 let lastRenderedHtml = '';
 let lastAnalysisJson = null;
 
-// ✅ 무료 티어 전용 모델 설정 (2026년 4월 기준)
-// gemini-1.5-flash      : 무료, 이미지 지원, 안정 운영 중 (OCR·분석 주력)
-// gemini-1.5-flash-8b   : 무료, 경량, 이미지 지원, 폴백용
-// ※ gemini-2.0-flash / 2.0-flash-lite 는 2026-06-01 폐기 예정 → 사용 금지
-// ※ gemini-2.5-flash 이상은 2026-04-01부터 무료 티어 제외
 const MODEL = {
-  ocr:      'gemini-1.5-flash',
-  analysis: 'gemini-1.5-flash',
-  fallback:  'gemini-1.5-flash-8b'
+  ocr: 'gemini-2.5-flash-lite',
+  analysis: 'gemini-2.5-flash',       // flash: 이미지 직접 분석 정확도 대폭 향상
+  fallback: 'gemini-2.5-flash'
 };
 
 const MOCK_JSON = {
@@ -391,19 +386,19 @@ function renderSafe(s=''){
   if(!s) return '-';
   let r = String(s);
   const PH = (i) => `\x00${i}\x00`;
-  // [버그6 수정] 전역 store 객체와 이름 충돌 방지 → _safeStore 로 변경
-  const _safeStore = [];
-  const protect = (re) => { r = r.replace(re, (m) => { _safeStore.push(m); return PH(_safeStore.length-1); }); };
-  protect(/<sub>[^<]*<\/sub>/gi);
-  protect(/<sup>[^<]*<\/sup>/gi);
-  protect(/<br\s*\/?>/gi);
+  const store = [];
+  // 허용 태그 보호
+  const protect = (re, tag) => { r = r.replace(re, (m) => { store.push(m); return PH(store.length-1); }); };
+  protect(/<sub>[^<]*<\/sub>/gi, 'sub');
+  protect(/<sup>[^<]*<\/sup>/gi, 'sup');
+  protect(/<br\s*\/?>/gi, 'br');
   // 마크다운 → 임시 플레이스홀더
-  r = r.replace(/\*\*([^*]+)\*\*/g, (m,t) => { _safeStore.push('<strong>'+t+'</strong>'); return PH(_safeStore.length-1); });
-  r = r.replace(/\*([^*\n]+)\*/g,   (m,t) => { _safeStore.push('<em>'+t+'</em>'); return PH(_safeStore.length-1); });
+  r = r.replace(/\*\*([^*]+)\*\*/g, (m,t) => { store.push('<strong>'+t+'</strong>'); return PH(store.length-1); });
+  r = r.replace(/\*([^*\n]+)\*/g,   (m,t) => { store.push('<em>'+t+'</em>'); return PH(store.length-1); });
   // HTML escape
   r = r.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   // 플레이스홀더 복원
-  r = r.replace(/\x00(\d+)\x00/g, (m,i) => _safeStore[parseInt(i)]);
+  r = r.replace(/\x00(\d+)\x00/g, (m,i) => store[parseInt(i)]);
   return r;
 }
 function safeText(s){return (s||'').toString().trim();}
@@ -479,7 +474,7 @@ function applyWeightedScores(problem){
 
   const solutionLen=normalizeText(solutionText).length;
   const studentLen=normalizeText(studentText).length + normalizeText(p.student_summary?.drawing||'').length;
-  // [버그8 수정] hasCoreEquation 미사용 변수 제거
+  const hasCoreEquation = extractMathTokens(p.student_summary?.equation||'').length >= 3;
   // 이미지 직접 분석 모드: AI가 이미지를 보고 직접 판단하므로
   // 텍스트 유사도(sim)만으로 분석 제외하지 않음 — AI 판단을 신뢰
   // 이미지 분석 자체 실패한 경우만 제외
@@ -557,38 +552,28 @@ async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn
   });
   const raw=await res.text();
   if(!res.ok){
-    let msg='API 오류', retryAfter=60;
-    try{
-      // [수정] Retry-After 헤더 직접 파싱 (프록시 파싱 의존 제거)
-      const headerRetry = res.headers?.get?.('retry-after') || res.headers?.get?.('Retry-After');
-      if(headerRetry) retryAfter = Math.min(parseInt(headerRetry)||60, 60);
-      const j=JSON.parse(raw);
-      msg=j.error?.message||msg;
-      // 헤더에 없으면 바디에서 파싱
-      if(!headerRetry) retryAfter=Math.min(j.retryAfter||60, 60);
-    }catch{msg=raw.slice(0,300);}
+    let msg='API 오류', retryAfter=65;
+    try{const j=JSON.parse(raw); msg=j.error?.message||msg; retryAfter=j.retryAfter||65;}catch{msg=raw.slice(0,300);}
     msg=msg.replace(/model:\s*gemini[\w.-]*/gi,'').replace(/\s{2,}/g,' ').trim();
 
     const isOverload = res.status===503 || msg.toLowerCase().includes('high demand') || msg.toLowerCase().includes('overloaded');
-    const isQuota    = res.status===429 || msg.toLowerCase().includes('quota') || msg.toLowerCase().includes('rate limit');
+    const isQuota   = res.status===429;
 
-    // 무료 티어: 최대 4회 재시도, 대기 최대 60초
     if((isOverload || isQuota) && attempt<4){
-      const wait = isOverload ? 20 : retryAfter;
-      const useFallback = attempt >= 2;
-      const modelLabel = useFallback ? ' [폴백 모델]' : '';
-      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 제한'} — ${wait}초 후 재시도... (${attempt+1}/4)${modelLabel}`;
+      // 503 과부하: 짧게 기다렸다 재시도 (retryAfter 무시하고 고정 15초)
+      // 429 quota: proxy가 파싱한 retryAfter 사용
+      const wait = isOverload ? 15 : Math.min(retryAfter, 70);
+      const modelLabel = attempt>=1 ? ' [대체 모델]' : '';
+      const waitMsg=`⏳ ${isOverload?'서버 과부하':'할당량 초과'} — ${wait}초 후 재시도... (${attempt+1}/4)${modelLabel}`;
       if(setMsgFn) setMsgFn(waitMsg);
       else{const el=document.getElementById('loadingText'); if(el) el.innerHTML=waitMsg;}
       await sleep(wait*1000);
-      // 2회 이상 실패 시 폴백 모델로 전환
-      const nextModel = useFallback ? MODEL.fallback : model;
-      return callProxy({parts, system, model:nextModel, attempt:attempt+1, setMsgFn});
+      return callProxy({parts, system, model, attempt:attempt+1, setMsgFn});
     }
 
-    // 최종 실패 시 안내 (무료 티어 안내 포함)
-    if(isQuota)    throw new Error('무료 API 할당량에 도달했습니다. 1분 후 다시 시도하거나, Google AI Studio에서 사용량을 확인해 주세요.');
-    if(isOverload) throw new Error('Gemini 서버가 현재 혼잡합니다. 잠시 후 다시 시도해 주세요.');
+    // 최종 실패 시 한국어 안내
+    if(isOverload) throw new Error('Gemini 서버가 현재 매우 혼잡합니다. 잠시 후 다시 시도해 주세요.');
+    if(isQuota)    throw new Error('API 할당량이 초과됐습니다. 잠시 후 다시 시도해 주세요.');
     throw new Error(msg);
   }
   try{const j=JSON.parse(raw); return j.content?.map(c=>c.text||'').join('').trim()||'';}catch{return raw.trim();}
@@ -727,30 +712,52 @@ async function cropImageToGrid(file, coords) {
   });
 }
 
-// 파일 배열 전체를 grid crop → 문제 번호 순으로 평탄화
+// crop 조각 1개에서 Gemini로 실제 문제 번호 감지
+async function detectProblemNumber(file, fallbackNum) {
+  try {
+    const compressed = await compressImage(file, 'solution');
+    const parts = [
+      {type:'image', source:{type:'base64', media_type: compressed.mediaType, data: compressed.base64}},
+      {type:'text', text:'이 이미지에서 문제 번호를 찾아 {"number": N} 형식 JSON만 반환하세요. 없으면 {"number": 0}.'}
+    ];
+    const raw = await callProxy({parts, system: SYSTEM_NUMBER_DETECT, model: MODEL.ocr});
+    const j = JSON.parse(raw.replace(/```[^`]*```/g,'').trim().replace(/^[^{]*/,'').replace(/[^}]*$/,''));
+    const n = parseInt(j.number, 10);
+    return (Number.isFinite(n) && n > 0) ? n : fallbackNum;
+  } catch(e) {
+    console.warn('번호 감지 실패, fallback 사용:', fallbackNum, e);
+    return fallbackNum;
+  }
+}
+
+// 파일 배열 전체를 grid crop → 실제 문제 번호로 매핑
 // 파일이 1장이면 crop, 여러 장이면 각각 crop 후 합산
 async function autoCropFiles(files, setMsg, label) {
   if (!files.length) return [];
 
   // 반환값: [{number:1, file:...}, {number:2, file:...}, ...]
-  // number=0이면 번호 감지 실패 (인덱스 순서 사용)
   const allCropped = [];
+  let fallbackSeq = 1; // 번호 감지 실패 시 순서 번호
+
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (f.isPdf) { allCropped.push({number: i+1, file: f}); continue; }
+    if (f.isPdf) { allCropped.push({number: fallbackSeq++, file: f}); continue; }
 
-    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">문제 번호 확인 후 분할합니다</span>`);
+    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">문제 번호 감지 중...</span>`);
     const coords = await detectGridCoords(f);
     const pieces = await cropImageToGrid(f, coords);
 
-    // 각 crop 조각에서 문제 번호 감지 (API 호출 없이 이미지 내 숫자 위치로 추정)
-    // 열 우선 순서: 좌상=1, 좌하=2, 우상=3, 우하=4 기준
-    const baseNum = allCropped.length;
-    const numberedPieces = pieces.map((piece, pi) => ({
-      number: baseNum + pi + 1, // 기본: 순서 번호
-      file: piece
-    }));
-    allCropped.push(...numberedPieces);
+    // 각 crop 조각에서 실제 문제 번호를 Gemini로 감지
+    for (let pi = 0; pi < pieces.length; pi++) {
+      const piece = pieces[pi];
+      setMsg(`${label} 문제 번호 인식 중 (${i+1}/${files.length} — 조각 ${pi+1}/${pieces.length})...<br><span class="small muted">실제 번호를 확인합니다</span>`);
+      const detectedNum = await detectProblemNumber(piece, fallbackSeq);
+      // 이미 같은 번호가 있으면 덮어쓰지 않음 (첫 번째 감지 우선)
+      const isDuplicate = allCropped.some(c => c.number === detectedNum);
+      const finalNum = isDuplicate ? fallbackSeq : detectedNum;
+      allCropped.push({number: finalNum, file: piece});
+      fallbackSeq = Math.max(fallbackSeq, finalNum) + 1;
+    }
   }
   return allCropped; // [{number, file}, ...]
 }
@@ -892,14 +899,7 @@ async function analyze(){
   const setLabel=(t)=>{const el=document.getElementById('progressLabel'); if(el) el.textContent=t;};
 
   try{
-    if(isMock){
-      await sleep(500);
-      // [버그7 수정] early return 전 상태 정리 (finally 미실행 방지)
-      isAnalyzing=false;
-      document.getElementById('analyzeBtn').disabled=false;
-      renderResults(JSON.parse(JSON.stringify(MOCK_JSON)));
-      return;
-    }
+    if(isMock){ await sleep(500); renderResults(JSON.parse(JSON.stringify(MOCK_JSON))); return; }
 
     const ansEntries=Object.entries(correctAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
     const stuEntries=Object.entries(studentAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
@@ -1090,15 +1090,12 @@ ${JSON.stringify(problemResults)}
 
 function renderResults(data){
   const rc=document.getElementById('resultContent');
-  // [버그1 수정] applyWeightedScores의 반환값(깊은복사본)을 실제로 사용
-  const weighted=(data.problems||[]).map(p=>applyWeightedScores(p));
-  // [버그3 수정] 중복 조건 제거
-  const active=weighted.filter(p=>p.judgement!=='분석 제외');
+  const weighted=(data.problems||[]).map(p=>{applyWeightedScores(p); return p;});
+  const active=weighted.filter(p=>p.judgement!=='분석 제외'&&p.judgement!=='분석 제외');
   const avg=(arr,key)=>arr.length?(arr.reduce((s,p)=>s+(p.scores?.[key]||0),0)/arr.length).toFixed(1):'-';
 
   // ── 제외 문제 배너 ──
-  // [버그4 수정] 중복 OR 조건 제거
-  const excluded=weighted.filter(p=>p.judgement==='분석 제외');
+  const excluded=weighted.filter(p=>p.judgement==='분석 제외'||p.judgement==='분석 제외');
   let html='';
   if(excluded.length){
     html+=`<div class="warn-card"><div class="warn-body">⚠ <b>제외된 문제</b><br>${excluded.map(p=>`${p.number}번 문제는 해설/학생 풀이 근거가 너무 약해 자동 제외했습니다.`).join('<br>')}</div></div>`;
@@ -1107,12 +1104,10 @@ function renderResults(data){
   // ── 문제별 피드백 ──
   weighted.forEach(p=>{
     const jColor={'일치':'var(--green)','풀이가 다름':'var(--yellow)','오류 있음':'var(--red)','입력 필요':'var(--text2)'}[p.judgement]||'var(--text2)';
-    // [버그2 수정] _sim → similarity (applyWeightedScores가 저장하는 키)
-    const simPct=Math.round((p.similarity||0)*100);
+    const simPct=Math.round((p._sim||0)*100);
     html+=`<div class="result-card"><div class="result-card-header">문제 ${p.number} 피드백</div><div class="result-card-body">`;
-    // [버그5 수정] ⑤ 플레이스홀더+replace 방식 제거 → 정답값 직접 삽입
-    const answerDisplay = p.answer ? escapeHtml(p.answer) : '?';
-    html+=`<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">${answerDisplay}</div></div>`;
+    html+=`<div class="sec"><div class="sec-title">1. 정답</div><div style="font-size:22px;font-weight:700;color:var(--accent)">⑤</div></div>`;
+    if(p.answer) html=html.replace('⑤', escapeHtml(p.answer));
     html+=`<div class="sec"><div class="sec-title">2. 판정</div><div class="box" style="color:${jColor};font-weight:600">${escapeHtml(p.judgement)} &nbsp;|&nbsp; 유사도 ${simPct}% &nbsp;·&nbsp; ${simPct>=70?'양호':simPct>=50?'보통':'매우 낮음'}</div></div>`;
     // 해설 풀이
     const steps=p.solution_steps||[];
