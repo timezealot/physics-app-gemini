@@ -58,10 +58,7 @@ textarea::placeholder{color:var(--text3)}
 <div class="lightbox" id="lightbox" onclick="closeLightbox()"><button class="lightbox-close">×</button><img id="lightboxImg" src="" alt=""></div>
 <div class="container">
   <div id="inputView">
-    <div class="card">
-      <div class="card-header">📌 분석 범위 (선택)</div>
-      <div class="card-body"><textarea id="rangeText" style="border-top:none;min-height:44px" placeholder="예: 3번~6번 / 또는 비워두기"></textarea></div>
-    </div>
+
 
     <div class="card">
       <div class="card-header">
@@ -76,18 +73,6 @@ textarea::placeholder{color:var(--text3)}
           <span style="font-size:10px;font-weight:700;color:var(--text2)">학생 선택</span>
         </div>
         <div id="answerGrid" class="answer-grid"></div>
-      </div>
-    </div>
-
-    <div class="warn-card">
-      <div class="warn-body">
-        <b>권장 입력 규칙</b><br>
-        <span style="color:#dc2626;font-weight:700">★ 핵심: 사진 1장 = 문제 1개. 문제별로 따로 찍어 올릴수록 인식 정확도가 크게 올라갑니다</span><br>
-        <br>
-        1) 해설: 문제번호 + 풀이식 + 정답이 한 화면에 보이도록 문제별로 촬영<br>
-        2) 학생 풀이: 그림·화살표·거리 표기·최종 답이 잘 보이도록 문제별로 촬영<br>
-        3) 수동 정답/학생선택을 입력하면 OX 판단은 코드가 강제로 고정합니다<br>
-        4) 해설 OCR 결과가 너무 짧거나 식이 거의 없으면 해당 문제는 자동 제외됩니다
       </div>
     </div>
 
@@ -216,6 +201,16 @@ const SYSTEM_DIRECT = `당신은 고등학교 물리 교사입니다.
 ━━━ 정오답 판단 ━━━
 [정답]·[학생 선택] 제공 시 그것만 사용. 없으면 "입력 필요".
 
+━━━ 위치-시간/거리-시간 그래프 해석 규칙 ━━━
+- 그래프 기울기 = 속도(위치-시간) 또는 상대속도(거리-시간)
+- 거리-시간 그래프: 기울기 절댓값 = 두 물체 상대속도. 이동거리÷경과시간 정확히 계산
+- 학생이 속도를 잘못 계산했으면 반드시 "N단계 오류 — 학생:[학생값] / 해설:[해설값]" 형식으로 지적
+
+━━━ 운동량 보존 채점 규칙 ━━━
+- 벡터 방향 부호(+x/-x) 반드시 확인
+- "전체 운동량 합 = 0" 조건 활용 여부 확인
+- 학생이 이 조건을 누락했으면 반드시 개선점으로 지적
+
 JSON 스키마 (problems 배열에 이 문제 1개만):
 {
   "problems":[{
@@ -230,66 +225,6 @@ JSON 스키마 (problems 배열에 이 문제 1개만):
   "total":{"strengths":"","weaknesses":"","study_direction":""}
 }
 JSON 외 다른 문장 절대 금지. { 로 시작 } 로 끝.`
-
-const SYSTEM_ANALYSIS = `당신은 고등학교 물리 교사입니다. 출력은 반드시 JSON 한 개만 반환합니다.
-절대 규칙: 응답의 첫 글자는 반드시 { 이어야 합니다. \`\`\`json 같은 마크다운 펜스, 설명 문장, 전처리 텍스트를 절대 출력하지 마세요.
-
-목표:
-1) 해설과 학생 풀이를 문제별로 비교
-2) 판정: "일치" / "풀이가 다름" / "오류 있음" / "입력 필요" / "분석 제외" 중 하나
-3) 수동 입력된 정답/학생선택이 있으면 그 정보를 우선 존중
-4) 그림/화살표/기준점 정보가 OCR에 포함된 경우 반드시 solution_steps와 drawing에 반영
-5) 학생 풀이가 산만하거나 OCR이 불완전해도 있는 식·계산·그림으로 최선의 비교
-
-【OCR 불완전 처리 규칙】
-- OCR 결과에 "판독불가"가 포함되어도 나머지 내용으로 비교 진행
-- 해설 OCR에 그림정보/그림정보(2차 분석) 섹션이 있으면 반드시 solution_steps에 반영
-- 특정 단계의 식이 없으면 있는 단계만으로 비교하고 "일부 단계 OCR 미추출" 메모
-- 학생 식목록/계산과정에서 추출된 내용을 student_summary에 빠짐없이 반영
-
-【피드백 작성 규칙 — 케이스별 필수 형식】
-판정이 "일치"이면:
-  evaluation: "해설과 동일한 접근으로 정확하게 풀었습니다."
-  improvement: "없음."
-
-판정이 "풀이가 다름"이면:
-  evaluation: "N단계에서 학생:[학생식] vs 해설:[해설식]. 결과는 맞았으나 논리가 다릅니다."
-  improvement: 해설 방식으로 풀 때 더 명확한 이유 한 문장.
-
-판정이 "오류 있음"이면:
-  evaluation: "N단계에서 오류 — 학생:[학생식] / 해설:[해설식]. [물리적 원인]"
-  improvement: 해당 오류를 방지하는 구체적 방법.
-
-【역량 점수 기준】
-- 판정이 "일치"이면 concept/process/interpretation 모두 8~10점.
-- 판정이 "풀이가 다름"이면 관련 항목만 6~8점, 나머지 8~10점.
-- 판정이 "오류 있음"이면 오류 항목 최소 1점 이상 (0점 절대 금지). 이유에 틀린 식 직접 언급.
-- 추상 표현("잘못 세웠습니다") 금지. 반드시 수식 직접 대조.
-- LaTeX(\frac, \times, \tau 등) 금지. 분수=분자/분모, 곱셈=×.
-- 물리 미지수·변수는 이탤릭: *F*, *m*, *g*, *v*, *a*, *l*, *d* 등. 숫자·단위는 이탤릭 없이.
-
-반드시 아래 JSON 스키마를 따르세요:
-{
-  "problems":[{
-    "number":1,
-    "answer":"①",
-    "judgement":"일치|풀이가 다름|오류 있음|입력 필요|분석 제외",
-    "solution_steps":["..."],
-    "student_summary":{"equation":"...","calculation":"...","drawing":"...","final_answer":"..."},
-    "feedback":{"evaluation":"...","improvement":"..."},
-    "scores":{"concept":0,"concept_reason":"...","process":0,"process_reason":"...","interpretation":0,"interpretation_reason":"..."}
-  }],
-  "total":{"strengths":"...","weaknesses":"...","study_direction":"..."}
-}
-
-엄수 규칙:
-- 해설 풀이 단계는 [해설 원문]만 근거로 작성. OCR에 적힌 수식·숫자를 절대 임의로 수정하지 말 것
-- 분수 오독 방지: OCR 원문에 "5/3"이 있으면 반드시 5/3으로 사용. 임의로 4/3, 2/3 등으로 바꾸는 것 엄격히 금지
-- 학생 요약은 [학생 풀이 OCR]의 식목록·계산과정·그림정보·최종답 모두 반영
-- 그림정보가 있으면 반드시 drawing 또는 solution_steps에 반영
-- 정오답 판단: [정답] 목록과 [학생 선택] 목록의 번호만 비교. 이미지나 풀이 내용으로 추론 절대 금지. 둘 중 없으면 "입력 필요".
-- JSON 외 다른 문장 금지
-- 응답은 반드시 { 로 시작하고 } 로 끝납니다. 그 외 어떤 텍스트도 앞뒤에 붙이지 마세요.`
 
 function initAnswerUI(){
   const countEl=document.getElementById('countBtns');
@@ -531,17 +466,6 @@ function buildReason(kind,p,sim,base=''){
 }
 function trimForReason(s=''){s=safeText(s); return s.length>42?s.slice(0,42)+'…':s;}
 
-function parseProblemsFromOCR(text){
-  const blocks=[];
-  const parts=text.split(/\[문제\s*(\d+)\]/g);
-  for(let i=1;i<parts.length;i+=2){
-    const number=parseInt(parts[i],10);
-    const body=(parts[i+1]||'').trim();
-    if(Number.isFinite(number)) blocks.push({number, body});
-  }
-  return blocks;
-}
-
 async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn=null}){
   const apiKey=document.getElementById('apiKey').value.trim();
   const activeModel = attempt>=1 ? MODEL.fallback : model;
@@ -584,27 +508,6 @@ async function callProxy({parts, system='', model=MODEL.ocr, attempt=0, setMsgFn
 // ══════════════════════════════════════════════
 // 2×2 자동 Crop 시스템
 // ══════════════════════════════════════════════
-
-const SYSTEM_NUMBER_DETECT = `이 이미지에서 문제 번호(숫자)를 찾아 JSON으로 반환하세요.
-문제 번호는 보통 이미지 좌상단에 원으로 둘러싸인 숫자, 또는 굵은 숫자로 표시됩니다.
-출력 형식 (JSON만, 설명 없이):
-{"number": 3}
-문제 번호를 찾을 수 없으면 {"number": 0} 반환.
-JSON 외 다른 텍스트 절대 금지.`
-
-const SYSTEM_CROP = `이미지에 2×2 격자로 배치된 4개의 문제 구역이 있습니다.
-각 구역의 경계를 찾아 JSON으로 반환하세요.
-
-출력 형식 (JSON만, 설명 없이):
-{"cols":[0.0, 0.5], "rows":[0.0, 0.5]}
-
-규칙:
-- cols: 세로 구분선의 X 비율 배열 (항상 0.0 포함, 2개)
-- rows: 가로 구분선의 Y 비율 배열 (항상 0.0 포함, 2개)
-- 문제가 1개면 {"cols":[0.0],"rows":[0.0]}
-- 문제가 2개 세로 나열이면 {"cols":[0.0],"rows":[0.0,0.5]}
-- 정확한 구분선 위치를 비율로 반환 (예: 실제 중앙이 52%면 0.52)
-- JSON 외 다른 텍스트 절대 금지`;
 
 // 이미지를 Gemini로 보내 2×2 grid 좌표 탐지
 async function detectGridCoords(file) {
@@ -712,54 +615,59 @@ async function cropImageToGrid(file, coords) {
   });
 }
 
-// crop 조각 1개에서 Gemini로 실제 문제 번호 감지
-async function detectProblemNumber(file, fallbackNum) {
-  try {
-    const compressed = await compressImage(file, 'solution');
-    const parts = [
-      {type:'image', source:{type:'base64', media_type: compressed.mediaType, data: compressed.base64}},
-      {type:'text', text:'이 이미지에서 문제 번호를 찾아 {"number": N} 형식 JSON만 반환하세요. 없으면 {"number": 0}.'}
-    ];
-    const raw = await callProxy({parts, system: SYSTEM_NUMBER_DETECT, model: MODEL.ocr});
-    const j = JSON.parse(raw.replace(/```[^`]*```/g,'').trim().replace(/^[^{]*/,'').replace(/[^}]*$/,''));
-    const n = parseInt(j.number, 10);
-    return (Number.isFinite(n) && n > 0) ? n : fallbackNum;
-  } catch(e) {
-    console.warn('번호 감지 실패, fallback 사용:', fallbackNum, e);
-    return fallbackNum;
+// 해설 텍스트에서 문제 번호 배열 추출
+// "[문제 5]", "5번 문제", "문제5", "5번:", "19." 같은 패턴 인식
+function parseNumbersFromSolutionText(text) {
+  if (!text || !text.trim()) return null;
+  const nums = new Set();
+
+  // "[문제 5]", "[5번]", "문제 5", "5번 문제" 패턴
+  const patterns = [
+    /\[문제\s*(\d+)\]/g,
+    /\[(\d+)번\]/g,
+    /^(\d+)번\s*문제/gm,
+    /^문제\s*(\d+)/gm,
+    /^(\d+)번[:\s]/gm,
+  ];
+  for (const re of patterns) {
+    let m;
+    while ((m = re.exec(text)) !== null) nums.add(parseInt(m[1]));
   }
+
+  if (nums.size === 0) return null;
+  return [...nums].sort((a, b) => a - b);
 }
 
-// 파일 배열 전체를 grid crop → 실제 문제 번호로 매핑
-// 파일이 1장이면 crop, 여러 장이면 각각 crop 후 합산
-async function autoCropFiles(files, setMsg, label) {
+
+// 파일 배열 전체를 grid crop → 문제 번호 순으로 평탄화
+// rangeNumbers가 있으면 순서대로 실제 번호 배정 (API 오인식 방지)
+// rangeNumbers가 없으면 1,2,3... 순번 배정 후 analyze에서 allNums 기준 필터
+async function autoCropFiles(files, setMsg, label, rangeNumbers) {
   if (!files.length) return [];
 
-  // 반환값: [{number:1, file:...}, {number:2, file:...}, ...]
   const allCropped = [];
-  let fallbackSeq = 1; // 번호 감지 실패 시 순서 번호
+  let pieceIdx = 0; // 전체 crop 조각 순번 (rangeNumbers 인덱싱용)
 
   for (let i = 0; i < files.length; i++) {
     const f = files[i];
-    if (f.isPdf) { allCropped.push({number: fallbackSeq++, file: f}); continue; }
+    if (f.isPdf) {
+      const num = rangeNumbers ? (rangeNumbers[pieceIdx] || pieceIdx + 1) : pieceIdx + 1;
+      allCropped.push({number: num, file: f});
+      pieceIdx++;
+      continue;
+    }
 
-    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">문제 번호 감지 중...</span>`);
+    setMsg(`${label} 이미지 분할 중 (${i+1}/${files.length})...<br><span class="small muted">2×2 격자 분할합니다</span>`);
     const coords = await detectGridCoords(f);
     const pieces = await cropImageToGrid(f, coords);
 
-    // 각 crop 조각에서 실제 문제 번호를 Gemini로 감지
     for (let pi = 0; pi < pieces.length; pi++) {
-      const piece = pieces[pi];
-      setMsg(`${label} 문제 번호 인식 중 (${i+1}/${files.length} — 조각 ${pi+1}/${pieces.length})...<br><span class="small muted">실제 번호를 확인합니다</span>`);
-      const detectedNum = await detectProblemNumber(piece, fallbackSeq);
-      // 이미 같은 번호가 있으면 덮어쓰지 않음 (첫 번째 감지 우선)
-      const isDuplicate = allCropped.some(c => c.number === detectedNum);
-      const finalNum = isDuplicate ? fallbackSeq : detectedNum;
-      allCropped.push({number: finalNum, file: piece});
-      fallbackSeq = Math.max(fallbackSeq, finalNum) + 1;
+      const num = rangeNumbers ? (rangeNumbers[pieceIdx] || pieceIdx + 1) : pieceIdx + 1;
+      allCropped.push({number: num, file: pieces[pi]});
+      pieceIdx++;
     }
   }
-  return allCropped; // [{number, file}, ...]
+  return allCropped;
 }
 
 // crop 배열을 번호 기준으로 정렬하고 번호→file 맵 생성
@@ -793,8 +701,8 @@ async function compressImage(file, mode='solution'){
       const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
       const ctx=canvas.getContext('2d');
       if(mode==='student'){
-        // 손글씨: 대비 강화
-        ctx.filter='grayscale(100%) contrast(150%) brightness(100%)';
+        // 손글씨: grayscale 제거 → 색상 보존 + 대비만 강화 (빨간 첨삭 등 색깔 정보 유지)
+        ctx.filter='contrast(140%) brightness(105%)';
       } else {
         // 해설: 필터 없이 원본 그대로 (색깔 정보 보존)
         ctx.filter='none';
@@ -807,32 +715,6 @@ async function compressImage(file, mode='solution'){
   });
 }
 
-async function filesToParts(files, label='파일', mode='solution'){
-  const p=[];
-  for(let i=0;i<files.length;i++){
-    const f=await compressImage(files[i], mode);
-    p.push({type:'text', text:`${label}${i+1}: ${f.name}`});
-    if(f.isPdf) p.push({type:'document', source:{type:'base64',media_type:'application/pdf',data:f.base64}});
-    else p.push({type:'image', source:{type:'base64',media_type:f.mediaType,data:f.base64}});
-  }
-  return p;
-}
-
-function buildAnalysisParts({solutionOCR, studentOCR, questionText, rangeText}){
-  const ansEntries=Object.entries(correctAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
-  const stuEntries=Object.entries(studentAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
-  let answerText='';
-  if(ansEntries.length) answerText += `[정답]\n${ansEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
-  if(stuEntries.length) answerText += `[학생 선택]\n${stuEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
-  const parts=[];
-  if(rangeText) parts.push({type:'text', text:`[분석 범위]\n${rangeText}`});
-  if(questionText) parts.push({type:'text', text:`[문제]\n${questionText}`});
-  parts.push({type:'text', text:`[해설 원문]\n${solutionOCR || '없음'}`});
-  parts.push({type:'text', text:`[학생 풀이 OCR]\n${studentOCR || '없음'}`});
-  if(answerText) parts.push({type:'text', text:answerText});
-  parts.push({type:'text', text:`위 자료만 사용해 JSON만 출력하세요.`});
-  return parts;
-}
 
 function robustJsonParse(text){
   // 디버그: 콘솔에 raw 응답 출력 (파싱 실패 원인 추적용)
@@ -874,7 +756,6 @@ async function analyze(){
   const qT=document.getElementById('text-q').value.trim();
   const aT=document.getElementById('text-a').value.trim();
   const sT=document.getElementById('text-s').value.trim();
-  const rangeText=document.getElementById('rangeText').value.trim();
   if(!qT && !aT && !sT && !store.q.length && !store.a.length && !store.s.length){
     alert('사진 또는 텍스트를 하나 이상 입력해주세요.'); return;
   }
@@ -908,7 +789,7 @@ async function analyze(){
     if(!hasImages){
       setMsg('텍스트 분석 중...', 10);
       const parts=[];
-      if(rangeText) parts.push({type:'text',text:`[분석 범위]\n${rangeText}`});
+
       if(qT) parts.push({type:'text',text:`[문제]\n${qT}`});
       if(aT) parts.push({type:'text',text:`[해설]\n${aT}`});
       if(sT) parts.push({type:'text',text:`[학생 풀이]\n${sT}`});
@@ -926,19 +807,36 @@ async function analyze(){
     setMsg('이미지 구역 분석 중...<br><span class="small muted">2×2 격자를 찾아 문제별로 분할합니다</span>', 5);
     setLabel('준비 중');
 
-    const solCropped = store.a.length ? await autoCropFiles(store.a, setMsg, '해설') : [];
-    const stuCropped = store.s.length ? await autoCropFiles(store.s, setMsg, '학생 풀이') : [];
-    const qCropped   = store.q.length ? await autoCropFiles(store.q, setMsg, '문제') : [];
+    // 번호 우선순위: 해설 텍스트 → null(순번 배정)
+    const rangeNumbers =
+      parseNumbersFromSolutionText(aT) ||
+      null;
+    if (rangeNumbers) setLabel(`번호 감지: ${rangeNumbers.join(', ')}번`);
+
+    const solCropped = store.a.length ? await autoCropFiles(store.a, setMsg, '해설', rangeNumbers) : [];
+    const stuCropped = store.s.length ? await autoCropFiles(store.s, setMsg, '학생 풀이', rangeNumbers) : [];
+    const qCropped   = store.q.length ? await autoCropFiles(store.q, setMsg, '문제', rangeNumbers) : [];
 
     const solMap = buildNumberMap(solCropped);
     const stuMap = buildNumberMap(stuCropped);
     const qMap   = buildNumberMap(qCropped);
 
-    const allNums = [...new Set([
-      ...Object.keys(solMap),
-      ...Object.keys(stuMap),
-      ...Object.keys(qMap)
-    ])].map(Number).sort((a,b)=>a-b);
+    // 해설과 학생풀이 교집합 기준으로 분석 (문제지 이미지가 없어도 OK)
+    // rangeNumbers가 있으면 그것만, 없으면 solMap ∩ stuMap (또는 둘 중 하나라도 있는 것)
+    let allNums;
+    if (rangeNumbers) {
+      allNums = rangeNumbers.filter(n => solMap[n] || stuMap[n] || qMap[n]);
+    } else {
+      // sol과 stu 모두 있는 번호 우선, 없으면 각각 union
+      const solNums = Object.keys(solMap).map(Number);
+      const stuNums = Object.keys(stuMap).map(Number);
+      const qNums = Object.keys(qMap).map(Number);
+      const intersection = solNums.filter(n => stuMap[n] || qMap[n]);
+      allNums = intersection.length > 0
+        ? intersection
+        : [...new Set([...solNums, ...stuNums, ...qNums])];
+      allNums = allNums.sort((a,b)=>a-b);
+    }
 
     const maxProblems = allNums.length || 1;
     setLabel(`총 ${maxProblems}문제 감지됨`);
@@ -961,7 +859,6 @@ async function analyze(){
       const parts=[];
       parts.push({type:'text', text:
         `분석 대상: ${probNum}번 문제\n`
-        +(rangeText?`범위: ${rangeText}\n`:'')
         +(thisAns+thisStu)
         +`\n아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
       });
@@ -1000,7 +897,7 @@ async function analyze(){
             if(!hasEq && tooFew && retry===0){
               console.warn(`문제 ${probNum} 해설 품질 불량, 재시도...`);
               setMsg(`문제 ${probNum} 재시도 중...<br><span class="small muted">해설 인식 재시도합니다</span>`,pct);
-              await sleep(6000);
+              await sleep(3000);
               raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis});
               continue;
             }
@@ -1009,7 +906,7 @@ async function analyze(){
           }
         }catch(e){
           console.warn(`문제 ${probNum} 파싱 실패`,e);
-          if(retry===0){ await sleep(5000); raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis}); continue; }
+          if(retry===0){ await sleep(3000); raw=await callProxy({parts,system:SYSTEM_DIRECT,model:MODEL.analysis}); continue; }
         }
         break;
       }
@@ -1025,7 +922,7 @@ async function analyze(){
         };
       }
       problemResults.push(probData);
-      if(i<allNums.length-1) await sleep(4000);
+      if(i<allNums.length-1) await sleep(2000);
     }
 
     // ── Step 3: 구조화된 총평 ──
