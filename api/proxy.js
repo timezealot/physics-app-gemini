@@ -4,7 +4,6 @@ export const config = { maxDuration: 300 }; // 60→300: 긴 분석 타임아웃
 const ALLOWED_MODELS = new Set([
   'gemini-2.5-flash',
   'gemini-2.5-flash-lite',
-  'gemini-2.0-flash',        // 2.5 혼잡 시 fallback
 ]);
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
