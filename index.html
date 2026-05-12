@@ -162,9 +162,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 const MODEL_POOL = [
-  'google/gemma-4-26b-a4b-it:free',   // MoE, 빠름, 비전 지원 확인
-  'google/gemma-4-31b-it:free',        // 31B dense, 비전 지원 확인
-  'openrouter/free',                   // 자동 선택 fallback
+  'nvidia/nemotron-nano-12b-v2-vl:free', // 메인: OCRBench v2 1위, 손글씨/수식 인식 특화
+  'google/gemma-4-26b-a4b-it:free',    // fallback1
+  'google/gemma-4-31b-it:free',        // fallback2
+  'openrouter/free',                   // 최후 fallback
 ];
 let modelPoolIdx = 0;
 function nextModel() {
@@ -173,8 +174,8 @@ function nextModel() {
   return m;
 }
 const MODEL = {
-  ocr:      'google/gemma-4-26b-a4b-it:free',
-  analysis: 'google/gemma-4-26b-a4b-it:free', // 첫 문제 기본값 (실제론 nextModel() 사용)
+  ocr:      'nvidia/nemotron-nano-12b-v2-vl:free',
+  analysis: 'nvidia/nemotron-nano-12b-v2-vl:free', // 메인: OCR 특화
   fallback: 'google/gemma-4-31b-it:free',
 };
 
@@ -732,7 +733,7 @@ async function compressImage(file, mode='solution'){
     const img=new Image();
     img.onload=()=>{
       const MIN = 800; // 최소 보장 크기
-      const MAX = mode==='student' ? 1600 : 1400; // 손글씨 인식률 우선 (크기 줄이면 뭉개짐)
+      const MAX = mode==='student' ? 1800 : 1600; // Nemotron OCR: 고해상도 권장
       let w=img.width, h=img.height;
       if(w<MIN && h<MIN){
         const scale = MIN / Math.max(w, h);
@@ -742,12 +743,12 @@ async function compressImage(file, mode='solution'){
       const canvas=document.createElement('canvas'); canvas.width=w; canvas.height=h;
       const ctx=canvas.getContext('2d');
       if(mode==='student'){
-        ctx.filter='contrast(140%) brightness(105%)';
+        ctx.filter='contrast(180%) brightness(92%) saturate(110%)';
       } else {
         ctx.filter='none';
       }
       ctx.drawImage(img,0,0,w,h);
-      const quality = mode==='student' ? 0.97 : 0.93; // 학생 손글씨: 최고 화질
+      const quality = mode==='student' ? 0.99 : 0.94; // 손글씨 OCR 최고 화질
       resolve({...file, base64:canvas.toDataURL('image/jpeg',quality).split(',')[1], mediaType:'image/jpeg'});
     };
     img.onerror=()=>resolve({...file}); // 로드 실패 시 원본 그대로 반환
