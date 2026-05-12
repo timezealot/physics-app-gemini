@@ -63,7 +63,6 @@ textarea::placeholder{color:var(--text3)}
   <div id="inputView">
     <div class="card">
       <div class="card-header">📌 분석 범위 (선택)</div>
-      <div class="card-body"><textarea id="rangeText" style="border-top:none;min-height:44px" placeholder="예: 3번~6번 / 또는 비워두기"></textarea></div>
     </div>
 
     <div class="card">
@@ -326,13 +325,16 @@ function toggleMock(){
 }
 
 function handleUpload(key,input){
+  if(!store[key]) return; // key 유효성 검사
   Array.from(input.files).forEach(file=>{
+    if(file.size > 20*1024*1024){ alert(`${file.name}: 파일이 너무 큽니다 (최대 20MB).`); return; }
     const isPdf=file.type==='application/pdf';
     const reader=new FileReader();
     reader.onload=e=>{
       store[key].push({base64:e.target.result.split(',')[1],mediaType:isPdf?'application/pdf':(file.type||'image/jpeg'),name:file.name,isPdf});
       renderPreviews(key);
     };
+    reader.onerror=()=>alert(`${file.name}: 파일을 읽을 수 없습니다.`);
     reader.readAsDataURL(file);
   });
   input.value='';
@@ -352,7 +354,9 @@ function renderPreviews(key){
 function openLightbox(src){document.getElementById('lightboxImg').src=src;document.getElementById('lightbox').classList.add('open');}
 function closeLightbox(){document.getElementById('lightbox').classList.remove('open');}
 function goBack(){ isAnalyzing=false; document.getElementById('analyzeBtn').disabled=false;
-  // 정답/학생선택 초기화 (이전 값 잔류로 정오답 오판 방지)
+  // 파일 + 정답/학생선택 초기화
+  store.q=[]; store.a=[]; store.s=[];
+  ['q','a','s'].forEach(k=>{ renderPreviews(k); const t=document.getElementById('text-'+k); if(t) t.value=''; });
   Object.keys(correctAnswers).forEach(k=>delete correctAnswers[k]);
   Object.keys(studentAnswers).forEach(k=>delete studentAnswers[k]);
   initAnswerUI();
@@ -851,14 +855,13 @@ async function filesToParts(files, label='파일', mode='solution'){
   return p;
 }
 
-function buildAnalysisParts({solutionOCR, studentOCR, questionText, rangeText}){
+function buildAnalysisParts({solutionOCR, studentOCR, questionText}){
   const ansEntries=Object.entries(correctAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
   const stuEntries=Object.entries(studentAnswers).sort((a,b)=>Number(a[0])-Number(b[0]));
   let answerText='';
   if(ansEntries.length) answerText += `[정답]\n${ansEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
   if(stuEntries.length) answerText += `[학생 선택]\n${stuEntries.map(([n,v])=>`${n}번: ${v}`).join('\n')}\n`;
   const parts=[];
-  if(rangeText) parts.push({type:'text', text:`[분석 범위]\n${rangeText}`});
   if(questionText) parts.push({type:'text', text:`[문제]\n${questionText}`});
   parts.push({type:'text', text:`[해설 원문]\n${solutionOCR || '없음'}`});
   parts.push({type:'text', text:`[학생 풀이 OCR]\n${studentOCR || '없음'}`});
@@ -907,7 +910,6 @@ async function analyze(){
   const qT=document.getElementById('text-q').value.trim();
   const aT=document.getElementById('text-a').value.trim();
   const sT=document.getElementById('text-s').value.trim();
-  const rangeText=document.getElementById('rangeText').value.trim();
   if(!qT && !aT && !sT && !store.q.length && !store.a.length && !store.s.length){
     alert('사진 또는 텍스트를 하나 이상 입력해주세요.'); return;
   }
@@ -942,7 +944,6 @@ async function analyze(){
     if(!hasImages){
       setMsg('텍스트 분석 중...', 10);
       const parts=[];
-      if(rangeText) parts.push({type:'text',text:`[분석 범위]\n${rangeText}`});
       if(qT) parts.push({type:'text',text:`[문제]\n${qT}`});
       if(aT) parts.push({type:'text',text:`[해설]\n${aT}`});
       if(sT) parts.push({type:'text',text:`[학생 풀이]\n${sT}`});
@@ -995,7 +996,6 @@ async function analyze(){
       const parts=[];
       parts.push({type:'text', text:
         `분석 대상: ${probNum}번 문제\n`
-        +(rangeText?`범위: ${rangeText}\n`:'')
         +(thisAns+thisStu)
         +`\n아래 이미지들을 보고 ${probNum}번 문제만 분석해 JSON을 출력하세요.`
       });
