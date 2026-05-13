@@ -407,15 +407,7 @@ function calcSimilarity(solutionText, studentText, solutionDrawing='', studentDr
 
 function scoreBandBySimilarity(sim){
   if(sim>=0.9) return {penalty:0, label:'높음'};
-    // 정답 일치 시: AI 판정 존중하되 "오류 있음"이면 교정
-    const isCorrect = userAnswer===userStudent;
-    if(isCorrect){
-      if(!p.judgement || p.judgement==='오류 있음' || p.judgement==='입력 필요')
-        p.judgement = sim>=0.6 ? '일치' : '풀이가 다름';
-      // AI가 이미 일치/풀이가 다름으로 판정했으면 그대로 유지
-    } else {
-      p.judgement = '오류 있음'; // 정답 불일치: 강제
-    }
+  if(sim>=0.75) return {penalty:1, label:'양호'};
   if(sim>=0.55) return {penalty:3, label:'보통'};
   if(sim>=0.4) return {penalty:5, label:'낮음'};
   return {penalty:8, label:'매우 낮음'};
@@ -799,6 +791,7 @@ async function compressImage(file, mode='solution'){
       const quality = 0.93;
       resolve({...file, base64:canvas.toDataURL('image/jpeg',quality).split(',')[1], mediaType:'image/jpeg'});
     };
+    img.onerror=()=>resolve({...file}); // 로드 실패 시 원본 반환
     img.src=`data:${file.mediaType};base64,${file.base64}`;
   });
 }
