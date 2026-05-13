@@ -215,8 +215,42 @@ const SYSTEM_DIRECT = `당신은 고등학교 물리 교사입니다.
 "풀이가 다름": 오류 항목 6~8점, 나머지 8~10점
 "오류 있음": 오류 항목 최소 1점 이상, 나머지 실제 일치 정도에 따라 1~8점
 
-━━━ 정오답 판단 ━━━
-[정답]·[학생 선택] 제공 시 그것만 사용. 없으면 "입력 필요".
+━━━ 정오답 판단 (최우선 규칙) ━━━
+[정답]과 [학생 선택]이 모두 제공된 경우:
+  - [정답] = [학생 선택] → judgement는 반드시 "일치" 또는 "풀이가 다름" 중 하나. "오류 있음" 절대 금지.
+  - [정답] ≠ [학생 선택] → judgement는 반드시 "오류 있음". 풀이 내용과 무관하게 강제 적용.
+  - 판정은 풀이 과정이 아닌 [정답]/[학생 선택] 번호 일치 여부만으로 결정한다.
+둘 중 하나라도 없으면 → "입력 필요".
+
+━━━ 해설 오류 처리 ━━━
+[해설] 내용에 물리적으로 모순되거나 계산이 틀린 부분이 있어도 해설을 그대로 신뢰하지 말 것.
+학생 풀이와 비교 시 해설 자체의 오류가 의심되면 피드백에 "해설 검토 필요" 표기.
+특히 위치-시간 그래프에서 속도 계산 시 반드시: 속도 = (위치 변화량) / (시간 변화량) 으로 검증.
+
+━━━ 그래프 해석 규칙 (필수 — 반드시 아래 절차 준수) ━━━
+
+【위치-시간 그래프】
+STEP 1. 그래프의 꺾이는 점(변곡점) 좌표를 모두 읽는다.
+  예: (0, 0L), (3t₀, 24L), (5t₀, 26L), (7t₀, 22L)
+STEP 2. 각 구간의 속도를 계산한다.
+  공식: v = (끝 위치 - 시작 위치) / (끝 시간 - 시작 시간)
+  예: 0~3t₀ 구간 → v = (24L - 0) / (3t₀ - 0) = 8L/t₀
+  ⚠️ 절대 금지: 이동거리÷총시간, 눈대중 기울기, 단위 시간당 1칸으로 읽기
+STEP 3. 해설 풀이 속도값과 비교한다.
+
+【거리-시간 그래프 (두 물체 사이 거리)】
+STEP 1. 꺾이는 점 좌표 읽기: (시간, 거리)
+STEP 2. 각 구간 기울기 = (거리 변화) / (시간 변화)
+  - 기울기 절댓값 = 두 물체 상대속도 |v_A - v_B|
+  - 거리 감소 구간 → 두 물체 접근 (상대속도 = 감소율)
+  - 거리 증가 구간 → 두 물체 멀어짐
+  예: 0~2s 거리 8→0m → 기울기 = 8/2 = 4m/s = |v_A - v_B|
+STEP 3. 여러 구간 기울기로 각 물체 속도 역산
+
+【학생 그래프 오류 판정】
+학생이 그래프에서 속도를 잘못 읽었으면:
+  - "N구간 속도 계산 오류 — 학생: v = [학생값] / 해설: v = [해설값]" 형식으로 명시
+  - 학생이 (끝점-시작점)이 아닌 이동거리 합산이나 한 칸 눈대중으로 읽은 경우 이를 명시
 
 JSON 스키마 (problems 배열에 이 문제 1개만):
 {
@@ -373,7 +407,15 @@ function calcSimilarity(solutionText, studentText, solutionDrawing='', studentDr
 
 function scoreBandBySimilarity(sim){
   if(sim>=0.9) return {penalty:0, label:'높음'};
-  if(sim>=0.75) return {penalty:1, label:'양호'};
+    // 정답 일치 시: AI 판정 존중하되 "오류 있음"이면 교정
+    const isCorrect = userAnswer===userStudent;
+    if(isCorrect){
+      if(!p.judgement || p.judgement==='오류 있음' || p.judgement==='입력 필요')
+        p.judgement = sim>=0.6 ? '일치' : '풀이가 다름';
+      // AI가 이미 일치/풀이가 다름으로 판정했으면 그대로 유지
+    } else {
+      p.judgement = '오류 있음'; // 정답 불일치: 강제
+    }
   if(sim>=0.55) return {penalty:3, label:'보통'};
   if(sim>=0.4) return {penalty:5, label:'낮음'};
   return {penalty:8, label:'매우 낮음'};
@@ -392,7 +434,11 @@ function applyWeightedScores(problem){
   const userStudent=studentAnswers[p.number];
   if(userAnswer) p.answer=userAnswer;
   if(userAnswer&&userStudent){
-    p.judgement = userAnswer===userStudent ? (sim>=0.75?'일치':'풀이가 다름') : '오류 있음';
+    const isCorrect=userAnswer===userStudent;
+    if(isCorrect){
+      if(!p.judgement||p.judgement==='오류 있음'||p.judgement==='입력 필요')
+        p.judgement=sim>=0.6?'일치':'풀이가 다름';
+    } else { p.judgement='오류 있음'; }
     p.student_summary = p.student_summary || {};
     p.student_summary.final_answer = userStudent;
   } else if (!p.judgement) {
@@ -822,7 +868,17 @@ async function analyze(){
   const apiKey=apiKeyPool.length?apiKeyPool[0]:document.getElementById('apiKey').value.trim();
   if(!isMock && !apiKey){ alert('API Key를 입력해주세요.'); return; }
   const qT=document.getElementById('text-q').value.trim();
-  const aT=document.getElementById('text-a').value.trim();
+  const aT=(()=>{
+    const raw=document.getElementById('text-a').value;
+    // 불확실한 내용이 포함된 줄 필터링 후 해설 텍스트 정제
+    return raw.split('\n').map(line=>{
+      // (지움), (판독불가), ? 등 불확실 표시 제거
+      let l=line.replace(/\(지움\)/g,'').replace(/\(판독불가\)/g,'').replace(/\[판독불가\]/g,'').trim();
+      // 등호 없이 불확실 내용만 남은 줄은 제외
+      if(!l || (l.includes('?') && !l.includes('='))) return '';
+      return l;
+    }).filter(l=>l).join('\n').trim();
+  })();
   const sT=document.getElementById('text-s').value.trim();
   if(!qT && !aT && !sT && !store.q.length && !store.a.length && !store.s.length){
     alert('사진 또는 텍스트를 하나 이상 입력해주세요.'); return;
